@@ -108,7 +108,7 @@ Critical nuance: **interactive approval interception is not universal.** Only Cl
 
 ### Auth and cost notes
 
-- **Subscription reuse holds for 4 of 5** (Claude, Codex, Gemini, Copilot reuse their own logins; aider is BYO-key). This validates the core "reuse what you pay for" thesis.
+- **Subscription reuse holds for the CLI-driven engines** (Codex, Gemini, Copilot reuse their own CLI logins; aider is BYO-key). **Correction (M2 research, 2026-06-14):** the **Claude Agent SDK** path used by the Claude adapter requires **`ANTHROPIC_API_KEY`** (or cloud-provider creds), NOT a claude.ai subscription. Anthropic's terms prohibit third-party products from reusing claude.ai login for the Agent SDK. So the "reuse what you pay for" thesis holds for Codex/Gemini/Copilot, but the Claude adapter needs an API key.
 - **Claude billing change (effective 2026-06-15):** subscription `claude -p` / Agent SDK usage draws from a separate monthly "Agent SDK credit" pool, not interactive limits. Surface this to the user so parallel runs don't silently exhaust it.
 - **Gemini first-login needs a browser** (no documented browserless OAuth); CI/fresh boxes need `GEMINI_API_KEY`.
 - **Copilot ACP is public preview** and already took one unannounced breaking removal (`--headless --stdio`). Pin the CLI version, disable auto-update, keep the `-p` text path as fallback.
