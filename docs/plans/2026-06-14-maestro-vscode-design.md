@@ -79,15 +79,38 @@ interface Capabilities {
 
 Each adapter's whole job is **translation**: spawn the CLI with the right headless flags, parse its native output (clean JSON for Claude Code, ANSI scraping for weaker tools), and emit the common `AgentEvent` stream. A weak engine reports fewer capabilities and the UI degrades gracefully: it shows raw output and auto-approves instead of offering inline approval, and never pretends a capability exists.
 
-### Engine support reality (early 2026)
+### Verified engine research (2026-06-14)
 
-| Engine | Headless mode | Structured output | Auth | Notes |
-| --- | --- | --- | --- | --- |
-| Claude Code | `claude -p ... --output-format stream-json` + SDK | Excellent | Own login | Best-in-class; build first |
-| Codex CLI | `codex exec` | Good | Own login | Strong second adapter |
-| Gemini CLI | Non-interactive mode | Moderate | Own login | Viable |
-| aider | `--message`, `--yes` | Moderate (scriptable) | API key | Fully scriptable |
-| GitHub Copilot CLI | Agentic, weakest headless story | Roughly none | **Copilot subscription** (device OAuth) | Reuses your subscription; add last as the "even Copilot plugs in" proof |
+Five parallel research agents verified each engine's live headless interface against official docs. Findings:
+
+| Engine | Headless invocation | Structured stream | Approvals (intercept?) | Steerable | Auth | Build slot |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Claude Code** | `claude -p "..." --output-format stream-json --verbose` (+ official Agent SDK) | Yes: typed NDJSON (`system/init`, `assistant`, `stream_event`, terminal `result`) | **Yes** (`--permission-prompt-tool` MCP, or SDK `canUseTool` callback) | Yes (`--resume`, `--input-format stream-json` mid-run) | Own login or `ANTHROPIC_API_KEY` | **First** |
+| **Codex CLI** | `codex exec "..." --json` (+ `@openai/codex-sdk`) | Yes: JSONL (`thread/turn/item` events, terminal `turn.completed`) | No: must pre-authorize (`--sandbox`, `-a never`); unattended requests block/fail | Turn-based resume (`codex exec resume <id>`) | ChatGPT sub (`codex login --device-auth`) or `CODEX_API_KEY` | **Second** |
+| **Gemini CLI** | `gemini -p "..." --output-format stream-json` OR `gemini --acp` | Yes via either (stream-json events, or ACP JSON-RPC) | Only via **ACP**; in `-p` mode unauthorized tools are auto-denied | Only via ACP (`-p` is one-shot/stateless) | Cached `~/.gemini` OAuth or `GEMINI_API_KEY` | Via ACP |
+| **aider** | `aider --yes-always --message "..." <files>` | No: plain stdout; **completion = process exit, changes = git auto-commit diff** | Blanket auto-accept only (`--yes-always`) | Repeated runs (context via git repo map); unofficial Python `Coder` API | BYO API key only | Later (blind adapter) |
+| **Copilot CLI** | `copilot -p "..." -s --no-ask-user` (text) OR `copilot --acp --stdio` (structured) | Only via **ACP** (NDJSON JSON-RPC); `-p` is plain text | Via ACP `requestPermission`, or flags `--allow-all-tools`/`--deny-tool` | ACP multi-prompt sessions; `--continue`/`--resume` | **Copilot subscription** (device OAuth / `gh` token, NO API key) | Last (preview, pin version) |
+
+### Architectural refinement: ACP as a force multiplier
+
+The research surfaced something the original design did not anticipate: **ACP (Agent Client Protocol) is an open JSON-RPC-over-stdio standard** that Gemini and Copilot CLI both implement, and that Zed and JetBrains already consume as clients. This collapses the adapter landscape into **three families** instead of N bespoke parsers:
+
+1. **Native-SDK adapters** (Claude Agent SDK, OpenAI Codex SDK): highest fidelity, typed events, best approval control. Use where the engine's own SDK beats its CLI.
+2. **A single generic ACP adapter** (unlocks Gemini + Copilot + any future ACP agent at once): speak ACP yourself, or via `@agentclientprotocol/sdk`. One adapter, many engines.
+3. **Blind adapters** (aider): plain text in, git auto-commit out. Completion = process exit; "what changed" = diff the new commit. Degraded but functional, and proves the capability-degradation design is real, not theoretical.
+
+This is leverage: after Claude (native SDK), the **second adapter should be the generic ACP one**, because it validates model-agnosticism *and* lights up two engines (Gemini, Copilot) from a single implementation. The build order below is revised accordingly.
+
+### Approvals reality (changes the autonomy model)
+
+Critical nuance: **interactive approval interception is not universal.** Only Claude Code (native) and ACP-mode engines (Gemini `--acp`, Copilot `--acp`) let an external driver catch a tool request and answer it. Codex `exec` and Gemini `-p` cannot: you must *pre-authorize* a tool allowlist / sandbox mode, and an unexpected request blocks or fails the run. So the `autonomy` field must **degrade per capability**: where `approvals: false`, "manual" mode is unavailable; the adapter maps it to the safest pre-authorized sandbox (e.g. read-only or workspace-write) and the UI shows an "auto (pre-authorized)" badge rather than offering inline approve/deny buttons that cannot work.
+
+### Auth and cost notes
+
+- **Subscription reuse holds for 4 of 5** (Claude, Codex, Gemini, Copilot reuse their own logins; aider is BYO-key). This validates the core "reuse what you pay for" thesis.
+- **Claude billing change (effective 2026-06-15):** subscription `claude -p` / Agent SDK usage draws from a separate monthly "Agent SDK credit" pool, not interactive limits. Surface this to the user so parallel runs don't silently exhaust it.
+- **Gemini first-login needs a browser** (no documented browserless OAuth); CI/fresh boxes need `GEMINI_API_KEY`.
+- **Copilot ACP is public preview** and already took one unannounced breaking removal (`--headless --stdio`). Pin the CLI version, disable auto-update, keep the `-p` text path as fallback.
 
 Note: VS Code's own agent mode does not spawn CLIs; it calls models in-process via the `vscode.lm` Language Model API. GitHub's terms restrict using Copilot's models through that API to build a competing standalone agent product, so the CLI route is also the cleaner legal path.
 
@@ -229,9 +252,11 @@ The thinnest thing that proves the two headline claims (parallel agents, model-a
 2. **Claude Code adapter** (fixtures, then live). Prove a real CLI streams cleanly.
 3. **Workspace Manager** (worktree + merge + conflict). Prove isolation.
 4. **Minimal UI**, one agent, full loop: spawn -> watch -> approve -> merge.
-5. **Parallelism + second adapter.** Prove both headline claims.
+5. **Parallelism + second adapter (the generic ACP adapter).** Prove both headline claims. ACP is the higher-leverage second adapter than Codex: it lights up Gemini and Copilot from one implementation and validates model-agnosticism against a different protocol shape than Claude's SDK.
 
 Step 1 alone confirms or kills the riskiest assumption before a line of UI is written.
+
+(Research note: the original plan named "Codex or aider" as the second adapter. Verified findings now favor the generic ACP adapter for slot 5, with Codex's native SDK adapter and aider's blind adapter as fast-follows.)
 
 ## Open questions and risks
 
