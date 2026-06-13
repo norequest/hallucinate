@@ -50,7 +50,8 @@ interface EngineAdapter {
   id: string;                       // "claude-code", "codex", "copilot", "aider"
   capabilities: Capabilities;       // drives graceful degradation
 
-  start(task: Task, workspace: Workspace): AgentSession;
+  // `role` carries instructions (system prompt), engine.model, and autonomy.
+  start(task: Task, workspace: Workspace, role: Role): AgentSession;
   health(): Promise<HealthStatus>;  // is the CLI installed and authed?
 }
 
@@ -66,7 +67,7 @@ type AgentEvent =
   | { kind: "action"; tool: string; detail: unknown }  // "wants to run `npm test`"
   | { kind: "approval"; id: string; detail: unknown }  // blocked, needs yes/no
   | { kind: "status"; state: AgentState }          // working -> awaiting -> done
-  | { kind: "done"; summary: string; diff: Diff }  // finished + what changed
+  | { kind: "done"; summary: string; diff?: Diff } // finished + what changed (diff optional: blind/ACP adapters derive it later)
   | { kind: "error"; message: string };
 
 interface Capabilities {
@@ -257,6 +258,12 @@ The thinnest thing that proves the two headline claims (parallel agents, model-a
 Step 1 alone confirms or kills the riskiest assumption before a line of UI is written.
 
 (Research note: the original plan named "Codex or aider" as the second adapter. Verified findings now favor the generic ACP adapter for slot 5, with Codex's native SDK adapter and aider's blind adapter as fast-follows.)
+
+## Implementation status
+
+- **Milestone 1 (Build order step 1) — DONE (2026-06-14, branch `milestone-1-core`).** `@maestro/core` package: the adapter contract, `FakeEngineAdapter`/`FakeWorkspaceProvider` test doubles, and the full `Orchestrator` state machine. Pure TypeScript, zero runtime deps, 35 tests green, typecheck clean. Built via subagent-driven TDD with spec + code-quality review per task. Two contract refinements emerged from review and were folded in while the contract was still private: (1) `EngineAdapter.start()` now receives `role` so a real adapter can reach instructions/model/autonomy; (2) `done.diff` is optional (blind/ACP adapters derive the diff after the fact). Plan: `2026-06-14-maestro-core-orchestrator.md`.
+- **Deferred to later milestones (tracked):** pre-spawn `health()` gating (M2), `WorkspaceProvider.cleanup()` wiring on terminal transitions (M3), stop-while-queued handling, `Emitter` listener-exception isolation, and the autonomy-per-capability degradation in adapters/UI.
+- **Next:** Milestone 2 — real Claude Code adapter (Agent SDK / stream-json + `canUseTool`), validated against recorded fixtures then live, implementing the now-proven contract.
 
 ## Open questions and risks
 
