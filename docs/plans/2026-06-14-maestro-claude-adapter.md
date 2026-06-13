@@ -1,5 +1,7 @@
 # Maestro Claude Code Adapter Implementation Plan (Milestone 2)
 
+> **⚠️ SUPERSEDED (2026-06-14).** Product focus narrowed to **GitHub Copilot only** — see `2026-06-14-maestro-copilot-adapter.md`, which is the active M2 plan. This Claude/Agent-SDK plan is kept for its research value: the verified Agent SDK API surface and, importantly, the finding that the **Agent SDK requires `ANTHROPIC_API_KEY` and prohibits claude.ai subscription reuse** (the reason the focus moved to Copilot, whose CLI reuses the Copilot subscription cleanly). Do not implement this plan unless a Claude adapter is revived later.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the first real engine adapter, `@maestro/adapter-claude`, driving Claude Code through the official Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) and satisfying the `EngineAdapter` contract proven in Milestone 1, validated entirely offline with a fake `query` and verified end-to-end through the real `Orchestrator`.
