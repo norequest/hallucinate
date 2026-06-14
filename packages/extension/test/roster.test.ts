@@ -16,12 +16,16 @@ describe("roster mapping", () => {
   });
 
   it("picks a distinct icon per state", () => {
-    const states: AgentState[] = ["preparing", "working", "awaiting-approval", "done", "error", "conflict", "merged", "discarded", "stopped"];
+    const states: AgentState[] = ["preparing", "working", "awaiting-approval", "done", "error", "conflict", "merged", "discarded", "stopped", "detached"];
     const icons = states.map(cardIcon);
     expect(new Set(icons).size).toBe(icons.length); // all distinct
   });
 
   it("flags attention cards", () => {
     expect(cardToRosterItem(card({ state: "done", attention: true })).attention).toBe(true);
+  });
+
+  it("returns debug-disconnect icon for detached state", () => {
+    expect(cardIcon("detached")).toBe("debug-disconnect");
   });
 });

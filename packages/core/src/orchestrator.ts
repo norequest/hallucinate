@@ -8,6 +8,7 @@ import type {
   MergeResult,
   OrchestratorConfig,
   OrchestratorEvent,
+  PersistedAgentRecord,
   Role,
   Task,
 } from "./types.js";
@@ -232,7 +233,7 @@ export class Orchestrator {
 
   async merge(agentId: string): Promise<MergeResult> {
     const agent = this.requireAgent(agentId);
-    if (agent.state !== "done") {
+    if (agent.state !== "done" && agent.state !== "detached") {
       throw new Error(`Agent ${agentId} is not ready to merge (state: ${agent.state})`);
     }
     const ws = this.workspaces;
@@ -262,6 +263,41 @@ export class Orchestrator {
       await ws.cleanup(agentId);
     }
     this.update(agent, "discarded");
+  }
+
+  /**
+   * Restore agent records from a previous session WITHOUT re-spawning, creating
+   * worktrees, or starting sessions. Emits agent-added (then replays the agent's
+   * persisted log as agent-event so subscribers reconstruct scrollback). Agents
+   * that were genuinely mid-run (working, awaiting-approval, preparing) are
+   * transitioned to "detached" (process gone, worktree preserved on disk).
+   * Conflict and terminal states are preserved as-is. Never touches the running
+   * counter, the queue, or the sessions map.
+   */
+  hydrate(records: readonly PersistedAgentRecord[]): void {
+    for (const record of records) {
+      const agent: Agent = { ...record.agent };
+      if (agent.workspace === undefined && record.workspacePath !== undefined) {
+        agent.workspace = {
+          agentId: agent.id,
+          path: record.workspacePath,
+          branch: record.workspaceBranch ?? "",
+        };
+      }
+      this.agents.set(agent.id, agent);
+      this.emitter.emit({ kind: "agent-added", agent });
+      for (const event of agent.log) {
+        this.emitter.emit({ kind: "agent-event", agentId: agent.id, event });
+      }
+      if (
+        agent.state === "working" ||
+        agent.state === "awaiting-approval" ||
+        agent.state === "preparing"
+      ) {
+        agent.state = "detached";
+        this.emitter.emit({ kind: "agent-updated", agent });
+      }
+    }
   }
 
   /**
@@ -295,7 +331,13 @@ export class Orchestrator {
   }
 
   private canDiscard(state: AgentState): boolean {
-    return state === "done" || state === "error" || state === "stopped" || state === "conflict";
+    return (
+      state === "done" ||
+      state === "error" ||
+      state === "stopped" ||
+      state === "conflict" ||
+      state === "detached"
+    );
   }
 
   private requireAgent(agentId: string): Agent {

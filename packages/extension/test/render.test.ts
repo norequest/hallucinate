@@ -110,3 +110,11 @@ describe("render.ts M6: send-back box", () => {
     expect(html).not.toContain('data-action="sendBack"');
   });
 });
+
+describe("render.ts M7: detached card", () => {
+  it("renders merge + discard actions on a detached card", () => {
+    const html = renderCardHTML(baseCard({ state: "detached", attention: true }));
+    expect(html).toContain('data-action="merge"');
+    expect(html).toContain('data-action="discard"');
+  });
+});
