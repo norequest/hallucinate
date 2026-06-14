@@ -91,6 +91,15 @@ describe("createCockpit", () => {
     expect(seen).toEqual(["resolve-conflict", "finish-merge", "create-pr"]);
   });
 
+  it("does not let a thrown sync handler escape handle(); routes it to onError", () => {
+    const { orch } = fakeOrch();
+    orch.spawn = () => { throw new Error("spawn blew up"); };
+    const onError = vi.fn();
+    const cockpit = createCockpit(orch, () => {}, onError);
+    expect(() => cockpit.handle({ type: "spawn", roleName: "R", description: "d" })).not.toThrow();
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("spawn blew up"));
+  });
+
   it("focus updates state and dispose unsubscribes", () => {
     const { orch, emit } = fakeOrch();
     const states: CockpitState[] = [];

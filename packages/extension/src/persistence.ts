@@ -30,6 +30,27 @@ export function deserializeEvent(line: string): OrchestratorEvent | null {
   }
 }
 
+// Section A2: Filename safety ----------------------------------------------
+
+/**
+ * True when `id` is safe to use as a path segment: alphanumerics plus dot,
+ * underscore and hyphen, and not the traversal tokens "." or "..". This is an
+ * allowlist (not a substitution), so a crafted id like "../../etc" or
+ * "a/b" can never escape the runtime directory. Pure, no I/O.
+ */
+export function isSafeAgentId(id: string): boolean {
+  if (id === "." || id === "..") return false;
+  return /^[A-Za-z0-9._-]+$/.test(id);
+}
+
+/** The `<id>.jsonl` filename for a safe id; throws on an unsafe id. Pure. */
+export function safeAgentFileName(id: string): string {
+  if (!isSafeAgentId(id)) {
+    throw new Error(`[Maestro persistence] unsafe agent id rejected: ${JSON.stringify(id)}`);
+  }
+  return `${id}.jsonl`;
+}
+
 // Section B: Replay ---------------------------------------------------------
 
 /**
@@ -100,13 +121,35 @@ export class MemoryPersistenceBackend implements PersistenceBackend {
 export class EventLogger {
   constructor(private readonly backend: PersistenceBackend) {}
 
+  /**
+   * Per-agent serialized operation queue. write() and forget() for the same id
+   * run in submission order, so a forget always lands after any pending write
+   * (no race where a late `merged` line is written AFTER the delete and
+   * resurrects a one-line ghost log on the next activate).
+   */
+  private readonly chains = new Map<string, Promise<void>>();
+  /** Ids whose log has been forgotten; later writes for them are dropped. */
+  private readonly forgotten = new Set<string>();
+
+  /** Chain op after any pending op for `id`, swallowing errors so the chain never breaks. */
+  private enqueue(id: string, op: () => Promise<void>): Promise<void> {
+    const prev = this.chains.get(id) ?? Promise.resolve();
+    const next = prev.then(op, op);
+    this.chains.set(id, next);
+    return next;
+  }
+
   /** Persist one event (fire-and-forget; errors are logged, never thrown). */
   write(event: OrchestratorEvent): void {
     const agentId = agentIdOf(event);
     if (agentId === null) return;
-    this.backend.append(agentId, serializeEvent(event)).catch((err: unknown) => {
-      console.error(`[Maestro persistence] failed to persist event for ${agentId}:`, err);
-    });
+    // Once an id is forgotten (terminal), never recreate its file.
+    if (this.forgotten.has(agentId)) return;
+    void this.enqueue(agentId, () =>
+      this.backend.append(agentId, serializeEvent(event)).catch((err: unknown) => {
+        console.error(`[Maestro persistence] failed to persist event for ${agentId}:`, err);
+      }),
+    );
   }
 
   /** Read all agent logs and return hydration records. Call once on activate. */
@@ -124,9 +167,14 @@ export class EventLogger {
     return replayToRecords(all);
   }
 
-  /** Remove a resolved agent's log (after merge or discard). */
+  /**
+   * Remove a resolved agent's log (after merge or discard). Runs after any
+   * pending write for the same id, and marks the id forgotten so a write that
+   * arrives later does not recreate the file.
+   */
   forget(agentId: string): Promise<void> {
-    return this.backend.remove(agentId);
+    this.forgotten.add(agentId);
+    return this.enqueue(agentId, () => this.backend.remove(agentId));
   }
 }
 

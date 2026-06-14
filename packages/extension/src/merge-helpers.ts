@@ -1,5 +1,18 @@
 /** Pure helpers for M9 merge UX. No vscode import, so unit-testable under Vitest. */
 
+import type { Agent } from "@maestro/core";
+
+/**
+ * The directory the agent's conflict files live in. Conflict markers are
+ * written into the agent's WORKTREE, not the main repo root, so "Resolve in
+ * Editor" must open files relative to the worktree. Returns the worktree path
+ * when known, else undefined so the caller can skip/warn rather than open the
+ * wrong (marker-free) copy from the main checkout.
+ */
+export function conflictFileBase(agent: Pick<Agent, "workspace">): string | undefined {
+  return agent.workspace?.path;
+}
+
 export function buildConflictResolveMessage(files: readonly string[]): string {
   const list = files.map((f) => `  - ${f}`).join("\n");
   return `Maestro: resolve the conflicts in:\n${list}\nThen click "Finish Merge" on the card.`;

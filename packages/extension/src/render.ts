@@ -1,3 +1,4 @@
+import { isTerminalState } from "@maestro/core";
 import type { CardVM } from "@maestro/cockpit";
 import { escapeHtml } from "./html.js";
 
@@ -66,6 +67,11 @@ function detail(card: CardVM): string {
     const files = card.diff.files.map((f) => `<li>${escapeHtml(f)}</li>`).join("");
     return `<div class="summary">${escapeHtml(card.summary ?? "")}</div><ul class="files">${files}</ul>`;
   }
+  if (card.state === "done" && card.diffError) {
+    // The diff could not be computed. Surface the error so the user does not
+    // merge blind (the merge/discard controls still render in actions()).
+    return `<div class="summary">${escapeHtml(card.summary ?? "")}</div><div class="diff-error">Could not compute diff: ${escapeHtml(card.diffError)}</div>`;
+  }
   if (card.state === "conflict" && card.conflictFiles) {
     const files = card.conflictFiles.map((f) => `<li>${escapeHtml(f)}</li>`).join("");
     return `<div class="conflict">Merge conflict in:</div><ul class="files">${files}</ul>`;
@@ -82,8 +88,11 @@ function detail(card: CardVM): string {
 /** Pure HTML for one agent card. Every engine-supplied string is escaped. */
 export function renderCardHTML(card: CardVM): string {
   const canApprove = card.engineCapabilities?.approvals ?? false;
+  // Only badge a LIVE agent as auto-approving. A terminal card (merged,
+  // discarded, detached, error, etc.) is not running, so "auto" would be
+  // misleading. Liveness is the core's single source of truth.
   const autoBadge =
-    !canApprove && card.state !== "merged" && card.state !== "discarded"
+    !canApprove && !isTerminalState(card.state)
       ? `<span class="badge">auto</span>`
       : "";
   return `<section class="card state-${card.state}${card.attention ? " attention" : ""}" data-id="${escapeHtml(card.id)}">

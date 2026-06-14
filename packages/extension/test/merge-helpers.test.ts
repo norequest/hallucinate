@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { buildConflictResolveMessage, buildPrTitle, buildPrBody } from "../src/merge-helpers.js";
+import type { Agent } from "@maestro/core";
+import { buildConflictResolveMessage, buildPrTitle, buildPrBody, conflictFileBase } from "../src/merge-helpers.js";
+
+describe("conflictFileBase (Issue 6)", () => {
+  it("returns the agent's worktree path so files open with their conflict markers", () => {
+    const agent = { workspace: { agentId: "a1", path: "/wt/a1", branch: "agent/a1" } } as Pick<Agent, "workspace">;
+    expect(conflictFileBase(agent)).toBe("/wt/a1");
+  });
+  it("returns undefined when the worktree is unavailable (caller skips/warns)", () => {
+    expect(conflictFileBase({})).toBeUndefined();
+  });
+});
 
 describe("buildConflictResolveMessage", () => {
   it("lists conflicted files and the finish-merge instruction", () => {

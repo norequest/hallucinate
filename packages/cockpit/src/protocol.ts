@@ -18,7 +18,11 @@ export interface CardVM {
   approvalDetail?: { tool: string; description: string };
   /** Engine capabilities carried to the UI for graceful degradation. */
   engineCapabilities?: { approvals: boolean; steerable: boolean };
-  /** True when this card needs a human decision (awaiting-approval, done, error, conflict). */
+  /**
+   * True when this card needs a human decision. Set by the core predicate
+   * `stateNeedsAttention`, true for: awaiting-approval, done, error, conflict,
+   * detached, merge-cleanup-failed.
+   */
   attention: boolean;
 }
 
@@ -46,3 +50,69 @@ export type WebviewToHost =
   | { type: "finish-merge"; agentId: string }
   | { type: "create-pr"; agentId: string }
   | { type: "retry-cleanup"; agentId: string };
+
+/** Messages that carry an `agentId: string`. */
+const AGENT_ID_TYPES = new Set([
+  "focus",
+  "steer",
+  "approve",
+  "stop",
+  "merge",
+  "discard",
+  "sendBack",
+  "resolve-conflict",
+  "finish-merge",
+  "create-pr",
+  "retry-cleanup",
+]);
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+/**
+ * Pure runtime guard for the webview->host boundary. The webview is a separate,
+ * potentially-compromised JS context, so its postMessage payloads are untrusted
+ * `unknown`. This narrows them to a real WebviewToHost (object with a known
+ * `type` literal and the per-type string fields the host dispatcher reads),
+ * letting the host drop anything malformed before it reaches the controller.
+ */
+export function isWebviewMessage(msg: unknown): msg is WebviewToHost {
+  if (msg === null || typeof msg !== "object") return false;
+  const m = msg as Record<string, unknown>;
+  if (!isString(m["type"])) return false;
+  const type = m["type"];
+
+  // Every message except "ready" carries an agentId string.
+  if (type !== "ready" && AGENT_ID_TYPES.has(type) && !isString(m["agentId"])) {
+    return false;
+  }
+
+  switch (type) {
+    case "ready":
+      return true;
+    case "focus":
+    case "stop":
+    case "merge":
+    case "discard":
+    case "resolve-conflict":
+    case "finish-merge":
+    case "create-pr":
+    case "retry-cleanup":
+      return isString(m["agentId"]);
+    case "spawn":
+      return isString(m["roleName"]) && isString(m["description"]);
+    case "steer":
+      return isString(m["agentId"]) && isString(m["input"]);
+    case "sendBack":
+      return isString(m["agentId"]) && isString(m["feedback"]);
+    case "approve":
+      return (
+        isString(m["agentId"]) &&
+        isString(m["approvalId"]) &&
+        (m["decision"] === "allow" || m["decision"] === "deny")
+      );
+    default:
+      return false;
+  }
+}

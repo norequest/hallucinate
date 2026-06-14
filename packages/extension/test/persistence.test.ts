@@ -4,9 +4,27 @@ import {
   serializeEvent,
   deserializeEvent,
   replayToRecords,
+  isSafeAgentId,
+  safeAgentFileName,
   MemoryPersistenceBackend,
   EventLogger,
+  type PersistenceBackend,
 } from "../src/persistence.js";
+
+/** A backend whose append() resolves only when `flush()` is called, to expose ordering. */
+class DeferredAppendBackend implements PersistenceBackend {
+  private readonly inner = new MemoryPersistenceBackend();
+  private pending: Array<() => void> = [];
+  read(id: string): Promise<string> { return this.inner.read(id); }
+  append(id: string, line: string): Promise<void> {
+    return new Promise((resolveAppend) => {
+      this.pending.push(() => { void this.inner.append(id, line).then(resolveAppend); });
+    });
+  }
+  listAgentIds(): Promise<string[]> { return this.inner.listAgentIds(); }
+  remove(id: string): Promise<void> { return this.inner.remove(id); }
+  flush(): void { const p = this.pending; this.pending = []; for (const run of p) run(); }
+}
 
 function agent(over: Partial<Agent> = {}): Agent {
   return {
@@ -145,5 +163,56 @@ describe("EventLogger", () => {
     await backend.append("a1", "x\n");
     await new EventLogger(backend).forget("a1");
     expect(await backend.listAgentIds()).toEqual([]);
+  });
+});
+
+describe("EventLogger persist/forget ordering (Issue 8)", () => {
+  it("forget runs after a pending write for the same id: no ghost log", async () => {
+    const backend = new DeferredAppendBackend();
+    const logger = new EventLogger(backend);
+    // A late terminal write is submitted, then forget for the same id. With the
+    // per-id chain, the write completes first, then forget removes the file.
+    logger.write({ kind: "agent-updated", agent: agent({ state: "merged" }) });
+    const forgotten = logger.forget("a1");
+    // The chained append runs on a later microtask, so flush after a tick to let
+    // the write get queued, then release it. forget's remove then runs after.
+    await Promise.resolve();
+    backend.flush();
+    await forgotten;
+    expect(await backend.listAgentIds()).toEqual([]);
+    expect(await backend.read("a1")).toBe("");
+  });
+
+  it("a write arriving after forget for a terminal id does not recreate the file", async () => {
+    const backend = new MemoryPersistenceBackend();
+    const logger = new EventLogger(backend);
+    await logger.forget("a1");
+    logger.write({ kind: "agent-event", agentId: "a1", event: { kind: "output", text: "late" } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await backend.listAgentIds()).toEqual([]);
+    expect(await backend.read("a1")).toBe("");
+  });
+});
+
+describe("isSafeAgentId / safeAgentFileName (Issue 30)", () => {
+  it("accepts a normal id", () => {
+    expect(isSafeAgentId("agent-1.2_x")).toBe(true);
+    expect(safeAgentFileName("agent-1")).toBe("agent-1.jsonl");
+  });
+  it("rejects ids with a slash, backslash, or traversal", () => {
+    expect(isSafeAgentId("a/b")).toBe(false);
+    expect(isSafeAgentId("a\\b")).toBe(false);
+    expect(isSafeAgentId("..")).toBe(false);
+    expect(isSafeAgentId(".")).toBe(false);
+    expect(isSafeAgentId("../../etc/passwd")).toBe(false);
+    expect(isSafeAgentId("")).toBe(false);
+  });
+  it("safeAgentFileName throws on an unsafe id", () => {
+    expect(() => safeAgentFileName("../escape")).toThrow();
+    expect(() => safeAgentFileName("a/b")).toThrow();
+  });
+  it("listAgentIds-style filtering drops unsafe names", () => {
+    const onDisk = ["good-1", "good_2", "..", "../evil", "a/b"];
+    expect(onDisk.filter(isSafeAgentId)).toEqual(["good-1", "good_2"]);
   });
 });
