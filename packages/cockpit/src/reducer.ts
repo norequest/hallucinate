@@ -50,6 +50,7 @@ export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitMo
       cards.set(event.agent.id, cardFromAgent(event.agent, ""));
       break;
     case "agent-updated": {
+      // agent-added always precedes agent-updated per the orchestrator contract.
       const prev = cards.get(event.agent.id);
       cards.set(event.agent.id, cardFromAgent(event.agent, prev?.output ?? ""));
       break;
