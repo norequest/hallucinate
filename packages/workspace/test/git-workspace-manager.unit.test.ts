@@ -310,3 +310,45 @@ describe("GitWorkspaceManager.pushAndPr", () => {
     ).rejects.toThrow("Unknown agent");
   });
 });
+
+// ---- Task C5: branch-retention policy ----
+
+describe("GitWorkspaceManager branch retention", () => {
+  it("with retainBranchOnMerge: false (default), cleanup deletes the branch", async () => {
+    const { manager, calls } = mgr();
+    await manager.create("a1");
+    await manager.cleanup("a1");
+    expect(calls.some((c) => c.args.join(" ") === "branch -D agent/a1")).toBe(true);
+  });
+
+  it("with retainBranchOnMerge: true, cleanup removes worktree but keeps branch", async () => {
+    const fake = makeFakeGitRunner([
+      { match: startsWith("rev-parse", "HEAD"), result: { stdout: "base123\n" } },
+    ]);
+    const m = new GitWorkspaceManager({
+      repoRoot: REPO,
+      runner: fake.runner,
+      retainBranchOnMerge: true,
+    });
+    await m.create("a1");
+    await m.cleanup("a1");
+    // worktree removed
+    expect(fake.calls.some((c) => c.args[0] === "worktree" && c.args[1] === "remove")).toBe(true);
+    // branch NOT deleted (no "branch -D" call)
+    expect(fake.calls.some((c) => c.args.join(" ") === "branch -D agent/a1")).toBe(false);
+  });
+
+  it("discard always deletes the branch regardless of retention setting", async () => {
+    const fake = makeFakeGitRunner([
+      { match: startsWith("rev-parse", "HEAD"), result: { stdout: "base123\n" } },
+    ]);
+    const m = new GitWorkspaceManager({
+      repoRoot: REPO,
+      runner: fake.runner,
+      retainBranchOnMerge: true,
+    });
+    await m.create("a1");
+    await m.discard("a1");
+    expect(fake.calls.some((c) => c.args.join(" ") === "branch -D agent/a1")).toBe(true);
+  });
+});
