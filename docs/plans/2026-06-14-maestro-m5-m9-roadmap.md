@@ -97,3 +97,28 @@ These files are extended by multiple milestones. Each plan writes ADDITIVE delta
 - `extension/src/render.ts` + `webview/main.ts`: M6 (approval/steer/send-back controls), M9 (conflict-resolve button). Additive.
 
 When these milestones are later implemented one at a time, the orchestrator merges the deltas; the plans just must not assume sole ownership of a shared file.
+
+---
+
+## Reconciliation Addendum (cross-plan integration deltas)
+
+The five M5-M9 plans were authored IN PARALLEL against `main`, then cross-checked. Each plan is internally complete, but the parallel authoring left a handful of seams that need these specific integration deltas. This addendum is the authoritative integration record: apply the relevant items when executing each plan. Severity: **[BLOCKER]** = will not compile/merge without it; **[CORRECTNESS]** = compiles but behaves wrong; **[INTEGRATION]** = additive, just merge carefully.
+
+**R1 [BLOCKER] M5→M6 approval `detail` field name.** The source of truth is M5's `AcpApprovalDetail { description: string; tool: string; args?: Record<string, unknown> }`. M6's plan uses `summary` for the human-readable text; **rename `summary` → `description` everywhere in M6**: the `ApprovalDetail`/`CardVM.approvalDetail`/`Agent.approvalDetail` field, the orchestrator extraction (`"description" in event.detail`), `render.ts` `approvalPanel` (`card.approvalDetail.description`), and every M6 test fixture. Keep `tool`. `decision` stays `"allow"|"deny"` (matches core `ApprovalDecision`).
+
+**R2 [BLOCKER] New `AgentState` values must extend the two exhaustive switches + `needsAttention`.** `packages/extension/src/roster-map.ts` `cardIcon()` and `packages/extension/src/render.ts` `actions()` are exhaustive `switch`es over `AgentState` with NO `default` (tsc enforces totality), so adding a state breaks compilation until both get a `case`. In the SAME milestone that adds the state:
+- M7 (`"detached"`): `cardIcon` → `case "detached": return "debug-disconnect";`  ·  `actions` → `case "detached": return \`${merge} ${discard}\`;` (worktree preserved → merge+discard valid).
+- M9 (`"merge-cleanup-failed"`): `cardIcon` → `case "merge-cleanup-failed": return "warning";`  ·  `actions` → a retry-cleanup action plus discard.
+Also extend `needsAttention()` in `packages/cockpit/src/reducer.ts` so the new states float to the top of the roster: M7 adds `|| state === "detached"`; M9 adds `|| state === "merge-cleanup-failed"`.
+
+**R3 [BLOCKER] `render.ts` is edited by both M6 and M9 — M9 patches M6, not `main`.** M6 fully rewrites `renderCardHTML` + `actions()` (capability-driven "auto" badge, approval panel, steer + send-back boxes). Execution order is M5→M6→…→M9, so **M9 applies its `render.ts` changes as a patch on top of M6's version**: add the `merge-cleanup-failed` case + conflict-resolve/create-pr buttons to M6's `actions()`, and the conflict-resolve/PR branches to M6's `detail()`, while PRESERVING M6's capability-based badge and approval/steer/send-back UI. Do NOT reintroduce the `engineId === "copilot"` badge check or drop M6's panels.
+
+**R4 [CORRECTNESS] M9's `merge()` rewrite must preserve M7's `"detached"` guard.** M9 replaces `Orchestrator.merge()` with a mutex-hardened version. If M7 ran first it widened the merge guard to accept `"done"` OR `"detached"`; M9's replacement must keep that: `if (agent.state !== "done" && agent.state !== "detached") throw …`, and keep `"detached"` discardable. (If M9 is built before M7, M7 re-applies the widening to M9's version.)
+
+**R5 [INTEGRATION] `core/src/events.ts` TERMINAL set + `AgentState` grow additively.** M7 adds terminal `"detached"`; M9 adds terminal `"merge-cleanup-failed"` (both go in the `TERMINAL` set). After both: `TERMINAL = {done, error, stopped, merged, discarded, detached, merge-cleanup-failed}`. **`"conflict"` is intentionally NON-terminal (M3 design: you resolve/merge/discard from it) and stays OUT of `TERMINAL` — do not "fix" it.**
+
+**R6 [CORRECTNESS] M7 hydrate must not mis-detach `conflict` agents.** M7 decides detachment via `!isTerminalState(state)`. Because `conflict` is non-terminal yet has no live process, a naive rule would wrongly mark a reloaded `conflict` agent `detached`, losing the conflict semantics. M7 must **detach only agents that were genuinely mid-run** (`working`/`awaiting-approval`/`preparing`) whose process is gone, and preserve `conflict` (and terminal states) as-is on hydrate.
+
+**R7 [INTEGRATION] `OrchestratorLike` + `controller.handle()` + `WebviewToHost` grow additively, names are distinct.** M6 adds the `sendBack` message + `OrchestratorLike.sendBack` + a `handle` case. M9 adds `resolve-conflict`/`finish-merge`/`create-pr`/`retry-cleanup` messages + matching `OrchestratorLike` methods + `handle` cases. `handle()` has no `default`, so it stays exhaustive as long as each plan adds its own cases (it does). M9's wiring of its merge-action handler into the cockpit is a **one-line delta**: pass the handler as an extra argument to the SINGLE existing `createCockpit(orch, …)` call — do NOT re-construct or reassign the `const cockpit`.
+
+**Verdict:** with R1-R7 applied, the five plans execute cleanly in order M5 → M6 → M7 → M8 → M9 (M7/M8/M9 are mutually independent; the only ordering constraint is M6 after M5, and M9's `render.ts`/`merge()` building on whatever of M6/M7 preceded it). Package names (`@maestro/adapter-acp`, `@maestro/conformance`, `@maestro/config` + its `yaml` dep) are clash-free; no plan touches root `package.json` `onlyBuiltDependencies`.
