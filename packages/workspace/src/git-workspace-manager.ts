@@ -4,7 +4,7 @@ import type { WorkspaceManager } from "@maestro/core";
 import { nodeGitRunner } from "./git-runner.js";
 import type { GitRunner } from "./git-runner.js";
 
-interface Record {
+interface AgentWorktree {
   path: string;
   branch: string;
   baseSha: string;
@@ -18,7 +18,7 @@ export interface GitWorkspaceManagerOptions {
 export class GitWorkspaceManager implements WorkspaceManager {
   private readonly runner: GitRunner;
   private readonly repoRoot: string;
-  private readonly records = new Map<string, Record>();
+  private readonly records = new Map<string, AgentWorktree>();
 
   constructor(opts: GitWorkspaceManagerOptions) {
     this.repoRoot = opts.repoRoot;
@@ -29,7 +29,7 @@ export class GitWorkspaceManager implements WorkspaceManager {
     return agentId.toLowerCase().replace(/[^a-z0-9.-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
   }
 
-  private require(agentId: string): Record {
+  private require(agentId: string): AgentWorktree {
     const r = this.records.get(agentId);
     if (!r) throw new Error(`Unknown agent: ${agentId}`);
     return r;
@@ -44,8 +44,12 @@ export class GitWorkspaceManager implements WorkspaceManager {
   }
 
   async create(agentId: string): Promise<Workspace> {
+    const slug = GitWorkspaceManager.slug(agentId);
+    if (slug.length === 0) {
+      throw new Error(`Agent id "${agentId}" produces an empty slug and cannot be a branch name`);
+    }
     const wtPath = path.join(this.repoRoot, ".conductor", "wt", agentId);
-    const branch = `agent/${GitWorkspaceManager.slug(agentId)}`;
+    const branch = `agent/${slug}`;
     const baseSha = (await this.git(["rev-parse", "HEAD"])).trim();
     await this.runner(["worktree", "prune"], { cwd: this.repoRoot });
     await this.git(["worktree", "add", wtPath, "-b", branch, baseSha]);
@@ -75,7 +79,16 @@ export class GitWorkspaceManager implements WorkspaceManager {
     if (attempt.exitCode !== 0) {
       const conflicted = (await this.git(["diff", "--name-only", "--diff-filter=U"]))
         .split("\n").map((f) => f.trim()).filter(Boolean);
-      await this.runner(["merge", "--abort"], { cwd: this.repoRoot });
+      if (conflicted.length === 0) {
+        // Non-zero exit with no unmerged paths is a real failure (bad ref, dirty
+        // tree, etc.), not a content conflict. Clear any partial merge state with a
+        // best-effort abort, then surface the underlying error.
+        await this.runner(["merge", "--abort"], { cwd: this.repoRoot });
+        throw new Error(`git merge ${rec.branch} failed (${attempt.exitCode}): ${attempt.stderr.trim()}`);
+      }
+      // Genuine conflict: a merge is in progress, so abort must succeed. Use the
+      // throwing helper so a stuck repo surfaces instead of being silently left mid-merge.
+      await this.git(["merge", "--abort"]);
       return { status: "conflict", files: conflicted };
     }
     await this.git(["commit", "--no-edit", "-m", `Merge ${rec.branch} via Maestro`]);

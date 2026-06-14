@@ -55,4 +55,23 @@ describe("GitWorkspaceManager create/cleanup/discard", () => {
     const { manager } = mgr();
     await expect(manager.diff("missing")).rejects.toThrow("Unknown agent");
   });
+
+  it("create throws when the agent id slugs to an empty branch name", async () => {
+    const { manager } = mgr();
+    await expect(manager.create("!!!")).rejects.toThrow("empty slug");
+  });
+
+  it("merge: a non-zero exit with no unmerged files is a real failure, not a phantom conflict", async () => {
+    const fake = makeFakeGitRunner([
+      { match: startsWith("rev-parse", "HEAD"), result: { stdout: "base123\n" } },
+      { match: startsWith("merge", "--no-commit"), result: { exitCode: 128, stderr: "fatal: not something we can merge" } },
+      // diff --diff-filter=U returns nothing -> no real conflict
+      { match: startsWith("diff", "--name-only", "--diff-filter=U"), result: { stdout: "" } },
+    ]);
+    const m = new GitWorkspaceManager({ repoRoot: REPO, runner: fake.runner });
+    await m.create("a1");
+    await expect(m.merge("a1")).rejects.toThrow("git merge agent/a1 failed (128)");
+    // it attempted a best-effort abort to clear any partial state
+    expect(fake.calls.some((c) => c.args.join(" ") === "merge --abort")).toBe(true);
+  });
 });
