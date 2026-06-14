@@ -8,6 +8,7 @@ import { RosterTreeDataProvider } from "./roster.js";
 import { StageWebviewPanel } from "./stage.js";
 import { EventLogger } from "./persistence.js";
 import { FsPersistenceBackend } from "./persistence-fs.js";
+import { loadConductorDir, makeNodeFsReader, scaffoldIfMissing, makeNodeFsWriter } from "@maestro/config";
 
 const DEFAULT_ROLE: Role = {
   name: "Implementer",
@@ -81,14 +82,51 @@ export function activate(context: vscode.ExtensionContext): void {
       if (agentId) cockpit.handle({ type: "focus", agentId });
     }),
     vscode.commands.registerCommand("maestro.spawnAgent", async () => {
+      // First-run: scaffold .conductor/ if absent (non-fatal on failure).
+      const fsWriter = await makeNodeFsWriter();
+      await scaffoldIfMissing(repoRoot, fsWriter).catch(() => false);
+
+      // Load roles from .conductor/.
+      const fsReader = await makeNodeFsReader();
+      const loaded = await loadConductorDir(repoRoot, fsReader).catch(() => null);
+
+      let selectedRole = DEFAULT_ROLE;
+
+      if (loaded && loaded.roles.length > 0) {
+        if (loaded.errors.length > 0) {
+          const msgs = loaded.errors.map((e) => `${e.source}: ${e.errors.join("; ")}`).join("\n");
+          void vscode.window.showWarningMessage(`Maestro: config errors in .conductor/:\n${msgs}`);
+        }
+        if (loaded.roles.length === 1) {
+          selectedRole = loaded.roles[0]!;
+        } else {
+          const picks = loaded.roles.map((r) => ({
+            label: r.name,
+            description: `${r.engine.id} · ${r.autonomy}`,
+            role: r,
+          }));
+          const picked = await vscode.window.showQuickPick(picks, {
+            title: "Select a role for this agent",
+            placeHolder: "Role",
+          });
+          if (!picked) return;
+          selectedRole = picked.role;
+        }
+      }
+
       const description = await vscode.window.showInputBox({
-        prompt: "Task for the agent",
+        prompt: `Task for ${selectedRole.name}`,
         placeHolder: "e.g. Add a --version flag to the CLI",
       });
       if (!description) return;
+
+      // Register the selected role (idempotent: overwrites by name). Handles roles
+      // loaded from YAML that were not pre-registered at activate time.
+      orch.registerRole(selectedRole);
+
       stage.reveal();
       try {
-        cockpit.handle({ type: "spawn", roleName: DEFAULT_ROLE.name, description });
+        cockpit.handle({ type: "spawn", roleName: selectedRole.name, description });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         void vscode.window.showErrorMessage(`Maestro: could not spawn agent: ${message}`);
