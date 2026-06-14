@@ -10,6 +10,7 @@ import type {
   Role,
   Task,
 } from "./types.js";
+import { isWorkspaceManager } from "./workspace.js";
 import type { WorkspaceProvider } from "./workspace.js";
 
 function errorMessage(error: unknown): string {
@@ -141,6 +142,7 @@ export class Orchestrator {
         agent.summary = event.summary;
         agent.diff = event.diff;
         this.update(agent, "done");
+        if (event.diff === undefined) this.computeDiff(agent);
         break;
       case "error":
         this.fail(agent, event.message);
@@ -168,6 +170,22 @@ export class Orchestrator {
   private fail(agent: Agent, message: string): void {
     agent.error = message;
     this.update(agent, "error");
+  }
+
+  private computeDiff(agent: Agent): void {
+    if (!isWorkspaceManager(this.workspaces)) return; // plain provider -> no-op
+    const ws = this.workspaces;
+    void ws
+      .diff(agent.id)
+      .then((diff) => {
+        if (agent.diff !== undefined) return; // adapter won the race
+        agent.diff = diff;
+        this.emitter.emit({ kind: "agent-updated", agent });
+      })
+      .catch((error) => {
+        agent.diffError = errorMessage(error);
+        this.emitter.emit({ kind: "agent-updated", agent });
+      });
   }
 
   approve(agentId: string, approvalId: string, decision: ApprovalDecision): void {
