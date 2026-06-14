@@ -10,7 +10,7 @@
   "contributes": {
     "viewsContainers": {
       "activitybar": [
-        { "id": "maestro", "title": "Maestro", "icon": "$(rocket)" }
+        { "id": "maestro", "title": "Maestro", "icon": "resources/maestro.svg" }
       ]
     },
     "views": {

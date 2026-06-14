@@ -3,10 +3,14 @@ import type { CockpitState } from "@maestro/cockpit";
 import { cardToRosterItem, type RosterItem } from "./roster-map.js";
 
 /** Thin TreeDataProvider over the latest CockpitState. */
-export class RosterTreeDataProvider implements vscode.TreeDataProvider<RosterItem> {
+export class RosterTreeDataProvider implements vscode.TreeDataProvider<RosterItem>, vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.changed.event;
   private items: RosterItem[] = [];
+
+  dispose(): void {
+    this.changed.dispose();
+  }
 
   update(state: CockpitState): void {
     this.items = state.cards.map(cardToRosterItem);

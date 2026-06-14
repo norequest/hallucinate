@@ -39,6 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    roster,
     vscode.window.registerTreeDataProvider("maestro.roster", roster),
     vscode.commands.registerCommand("maestro.openStage", () => stage.reveal()),
     vscode.commands.registerCommand("maestro.focusAgent", (agentId?: string) => {
@@ -52,7 +53,12 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       if (!description) return;
       stage.reveal();
-      cockpit.handle({ type: "spawn", roleName: DEFAULT_ROLE.name, description });
+      try {
+        cockpit.handle({ type: "spawn", roleName: DEFAULT_ROLE.name, description });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        void vscode.window.showErrorMessage(`Maestro: could not spawn agent: ${message}`);
+      }
     }),
     { dispose: () => cockpit.dispose() },
   );

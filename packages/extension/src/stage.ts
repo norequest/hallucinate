@@ -29,6 +29,9 @@ export class StageWebviewPanel {
     webview.html = getStageHtml(scriptUri, styleUri, makeNonce(), webview.cspSource);
     panel.webview.onDidReceiveMessage((msg: WebviewToHost) => this.onMessage(msg));
     panel.onDidDispose(() => { this.panel = undefined; });
+    // Best-effort first paint. The webview's own "ready" message (sent once its
+    // script loads) is the guaranteed delivery: this early post may be dropped
+    // if the webview has not yet attached its message listener.
     this.post(this.lastState);
   }
 
