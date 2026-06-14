@@ -73,6 +73,13 @@ export class GitWorkspaceManager implements WorkspaceManager {
     return { files, patch };
   }
 
+  /**
+   * Merge the agent's branch into the base. Call {@link diff} first: merge
+   * operates on the committed branch HEAD only, so any uncommitted work left in
+   * the worktree is captured by diff's snapshot commit, not by merge. The
+   * Orchestrator computes the diff on done before a merge can be triggered, so
+   * this ordering holds in the normal flow; direct callers must honor it.
+   */
   async merge(agentId: string): Promise<MergeResult> {
     const rec = this.require(agentId);
     const attempt = await this.runner(["merge", "--no-commit", "--no-ff", rec.branch], { cwd: this.repoRoot });

@@ -31,6 +31,7 @@ describe("GitWorkspaceManager (real git)", () => {
     expect(git(repo, "branch", "--list", "agent/a1")).toContain("agent/a1");
     await m.cleanup("a1");
     expect(existsSync(ws.path)).toBe(false);
+    expect(git(repo, "branch", "--list", "agent/a1").trim()).toBe("");
   });
 
   it("diff captures the agent's edits (committed or not)", async () => {

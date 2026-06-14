@@ -35,13 +35,16 @@ describe("GitWorkspaceManager create/cleanup/discard", () => {
     ).toBe(true);
   });
 
-  it("cleanup: removes the worktree (force) and prunes", async () => {
+  it("cleanup: removes the worktree (force), deletes the branch, and prunes", async () => {
     const { manager, calls } = mgr();
     await manager.create("agent-1");
     await manager.cleanup("agent-1");
     expect(
       calls.some((c) => c.args.join(" ").startsWith("worktree remove --force /repo/.conductor/wt/agent-1")),
     ).toBe(true);
+    // cleanup also deletes the branch (symmetric with discard); lock it so a
+    // future "retain branch on merge" policy change is a visible test failure.
+    expect(calls.some((c) => c.args.join(" ") === "branch -D agent/agent-1")).toBe(true);
   });
 
   it("discard: removes worktree and force-deletes the branch", async () => {
