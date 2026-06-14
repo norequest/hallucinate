@@ -42,6 +42,8 @@ function actions(card: CardVM): string {
       return stop;
     case "done":
       return `${merge} ${discard}`;
+    case "detached":
+      return `${merge} ${discard}`;
     case "conflict":
     case "error":
     case "stopped":

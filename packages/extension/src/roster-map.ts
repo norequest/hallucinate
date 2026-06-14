@@ -23,6 +23,7 @@ export function cardIcon(state: AgentState): string {
     case "merged": return "git-merge";
     case "discarded": return "trash";
     case "stopped": return "circle-slash";
+    case "detached": return "debug-disconnect";
   }
 }
 

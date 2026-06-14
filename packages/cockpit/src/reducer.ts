@@ -16,7 +16,11 @@ export function initialModel(): CockpitModel {
 
 function needsAttention(state: AgentState): boolean {
   return (
-    state === "awaiting-approval" || state === "done" || state === "error" || state === "conflict"
+    state === "awaiting-approval" ||
+    state === "done" ||
+    state === "error" ||
+    state === "conflict" ||
+    state === "detached"
   );
 }
 
