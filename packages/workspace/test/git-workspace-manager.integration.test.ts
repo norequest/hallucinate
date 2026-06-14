@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitWorkspaceManager } from "../src/git-workspace-manager.js";
@@ -82,5 +82,61 @@ describe("GitWorkspaceManager (real git)", () => {
     await m.discard("a1");
     expect(existsSync(ws.path)).toBe(false);
     expect(git(repo, "branch", "--list", "agent/a1").trim()).toBe("");
+  });
+});
+
+// ---- Task C2: isStale + rebase (real git) ----
+
+describe("GitWorkspaceManager isStale + rebase (real git)", () => {
+  it("isStale: false when HEAD has not moved, true after a new commit on the base", async () => {
+    const m = new GitWorkspaceManager({ repoRoot: repo });
+    await m.create("a1");
+    expect(await m.isStale("a1")).toBe(false);
+    // Advance the base branch
+    writeFileSync(join(repo, "base-advance.txt"), "base\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "base advance");
+    expect(await m.isStale("a1")).toBe(true);
+  });
+
+  it("rebase clean: agent branch gets the new base commit, merge then succeeds without a base-drift conflict", async () => {
+    const m = new GitWorkspaceManager({ repoRoot: repo });
+    const ws = await m.create("a1");
+    // Agent adds a file
+    writeFileSync(join(ws.path, "agent.txt"), "agent\n");
+    await m.diff("a1"); // snapshot commit
+
+    // Base advances on a different file (no content conflict)
+    writeFileSync(join(repo, "base.txt"), "base\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "base advance");
+
+    expect(await m.isStale("a1")).toBe(true);
+    const rebaseResult = await m.rebase("a1");
+    expect(rebaseResult).toEqual({ status: "clean" });
+    expect(await m.isStale("a1")).toBe(false); // baseSha updated
+
+    // Now a standard merge should still succeed
+    const mergeResult = await m.merge("a1");
+    expect(mergeResult).toEqual({ status: "clean" });
+  });
+
+  it("rebase conflict: reports the conflicted file and leaves the worktree clean", async () => {
+    const m = new GitWorkspaceManager({ repoRoot: repo });
+    const ws = await m.create("a1");
+    // Agent edits same line
+    writeFileSync(join(ws.path, "file.txt"), "agent-change\n");
+    await m.diff("a1");
+
+    // Base edits the same line
+    writeFileSync(join(repo, "file.txt"), "base-change\n");
+    git(repo, "commit", "-q", "-am", "base edits file");
+
+    const result = await m.rebase("a1");
+    expect(result.status).toBe("conflict");
+    if (result.status === "conflict") expect(result.files).toContain("file.txt");
+    // worktree not stuck mid-rebase
+    const status = git(ws.path, "status", "--porcelain").trim();
+    expect(status).toBe("");
   });
 });

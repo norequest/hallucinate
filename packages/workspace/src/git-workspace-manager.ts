@@ -102,6 +102,43 @@ export class GitWorkspaceManager implements WorkspaceManager {
     return { status: "clean" };
   }
 
+  /**
+   * Returns true if the repo's current HEAD has advanced past the SHA this
+   * agent branched from. When true, call rebase() before merge() to avoid a
+   * confusing "already up to date" or non-linear history.
+   */
+  async isStale(agentId: string): Promise<boolean> {
+    const rec = this.require(agentId);
+    const currentHead = (await this.git(["rev-parse", "HEAD"])).trim();
+    return currentHead !== rec.baseSha;
+  }
+
+  /**
+   * Rebase the agent's branch onto the current HEAD of the repo. Preserves the
+   * real-conflict-vs-real-failure discrimination established in merge():
+   *   - non-zero exit + unmerged --diff-filter=U files -> abort + conflict result
+   *   - non-zero exit + no unmerged files -> abort + throw (real failure)
+   *   - exit 0 -> update baseSha record + return { status: "clean" }
+   */
+  async rebase(agentId: string): Promise<MergeResult> {
+    const rec = this.require(agentId);
+    const newBase = (await this.git(["rev-parse", "HEAD"])).trim();
+    // Run rebase inside the worktree: rebase the agent's branch commits onto newBase.
+    const attempt = await this.runner(["rebase", newBase], { cwd: rec.path });
+    if (attempt.exitCode !== 0) {
+      const conflicted = (await this.runner(["diff", "--name-only", "--diff-filter=U"], { cwd: rec.path }))
+        .stdout.split("\n").map((f) => f.trim()).filter(Boolean);
+      await this.runner(["rebase", "--abort"], { cwd: rec.path });
+      if (conflicted.length === 0) {
+        throw new Error(`git rebase ${newBase} failed (${attempt.exitCode}): ${attempt.stderr.trim()}`);
+      }
+      return { status: "conflict", files: conflicted };
+    }
+    // Success: update the stored baseSha so subsequent isStale/diff/merge use the new base.
+    this.records.set(agentId, { ...rec, baseSha: newBase });
+    return { status: "clean" };
+  }
+
   async discard(agentId: string): Promise<void> {
     await this.teardown(agentId, true);
   }
