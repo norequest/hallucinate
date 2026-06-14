@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import type { Diff, MergeResult, Workspace } from "@maestro/core";
 import type { WorkspaceManager } from "@maestro/core";
-import { nodeGitRunner } from "./git-runner.js";
+import { nodeGitRunner, nodeShellRunner } from "./git-runner.js";
 import type { GitRunner } from "./git-runner.js";
 
 interface AgentWorktree {
@@ -13,16 +13,40 @@ interface AgentWorktree {
 export interface GitWorkspaceManagerOptions {
   repoRoot: string;
   runner?: GitRunner;
+  /** Injectable for non-git shell commands (e.g. gh). Defaults to spawning the binary directly. */
+  shellRunner?: GitRunner;
+  /**
+   * When true, the agent branch is kept after a successful merge (cleanup call).
+   * The worktree is still removed. Default: false (deletes branch on cleanup).
+   * Discard always deletes the branch regardless of this setting.
+   */
+  retainBranchOnMerge?: boolean;
+}
+
+export interface PrOptions {
+  title: string;
+  body: string;
+  base: string;
+  remote: string;
+  draft: boolean;
+}
+
+export interface PrResult {
+  prUrl: string;
 }
 
 export class GitWorkspaceManager implements WorkspaceManager {
   private readonly runner: GitRunner;
+  private readonly shellRunner: GitRunner;
   private readonly repoRoot: string;
+  private readonly retainBranchOnMerge: boolean;
   private readonly records = new Map<string, AgentWorktree>();
 
   constructor(opts: GitWorkspaceManagerOptions) {
     this.repoRoot = opts.repoRoot;
     this.runner = opts.runner ?? nodeGitRunner;
+    this.shellRunner = opts.shellRunner ?? nodeShellRunner;
+    this.retainBranchOnMerge = opts.retainBranchOnMerge ?? false;
   }
 
   static slug(agentId: string): string {
@@ -102,12 +126,104 @@ export class GitWorkspaceManager implements WorkspaceManager {
     return { status: "clean" };
   }
 
+  /**
+   * Returns true if the repo's current HEAD has advanced past the SHA this
+   * agent branched from. When true, call rebase() before merge() to avoid a
+   * confusing "already up to date" or non-linear history.
+   */
+  async isStale(agentId: string): Promise<boolean> {
+    const rec = this.require(agentId);
+    const currentHead = (await this.git(["rev-parse", "HEAD"])).trim();
+    return currentHead !== rec.baseSha;
+  }
+
+  /**
+   * Rebase the agent's branch onto the current HEAD of the repo. Preserves the
+   * real-conflict-vs-real-failure discrimination established in merge():
+   *   - non-zero exit + unmerged --diff-filter=U files -> abort + conflict result
+   *   - non-zero exit + no unmerged files -> abort + throw (real failure)
+   *   - exit 0 -> update baseSha record + return { status: "clean" }
+   */
+  async rebase(agentId: string): Promise<MergeResult> {
+    const rec = this.require(agentId);
+    const newBase = (await this.git(["rev-parse", "HEAD"])).trim();
+    // Run rebase inside the worktree: rebase the agent's branch commits onto newBase.
+    const attempt = await this.runner(["rebase", newBase], { cwd: rec.path });
+    if (attempt.exitCode !== 0) {
+      const conflicted = (await this.runner(["diff", "--name-only", "--diff-filter=U"], { cwd: rec.path }))
+        .stdout.split("\n").map((f) => f.trim()).filter(Boolean);
+      await this.runner(["rebase", "--abort"], { cwd: rec.path });
+      if (conflicted.length === 0) {
+        throw new Error(`git rebase ${newBase} failed (${attempt.exitCode}): ${attempt.stderr.trim()}`);
+      }
+      return { status: "conflict", files: conflicted };
+    }
+    // Success: update the stored baseSha so subsequent isStale/diff/merge use the new base.
+    this.records.set(agentId, { ...rec, baseSha: newBase });
+    return { status: "clean" };
+  }
+
+  /**
+   * Finish a merge after the user has resolved conflict markers. Checks for
+   * any remaining unmerged paths first: if found, returns the conflict result
+   * (the caller should tell the user to resolve those files too). If all
+   * markers are resolved, stages everything and commits the merge.
+   *
+   * Intended call site: the VS Code extension calls this after the user
+   * closes the merge editor and indicates resolution is complete.
+   */
+  async resolveMerge(agentId: string): Promise<MergeResult> {
+    this.require(agentId); // throws for unknown agent
+    // Check whether any paths are still unmerged in the working tree
+    const remaining = (await this.runner(["diff", "--name-only", "--diff-filter=U"], { cwd: this.repoRoot }))
+      .stdout.split("\n").map((f) => f.trim()).filter(Boolean);
+    if (remaining.length > 0) {
+      return { status: "conflict", files: remaining };
+    }
+    await this.git(["add", "-A"]);
+    await this.git(["commit", "--no-edit", "-m", "Merge resolved via Maestro"]);
+    return { status: "clean" };
+  }
+
+  /**
+   * PR mode: push the agent branch to the remote and open a pull request via
+   * `gh pr create`. This replaces the local merge when `maestro.prMode` is
+   * enabled in settings. The shellRunner is used for `gh` so the entire
+   * flow stays offline-testable with a fake runner.
+   *
+   * Does NOT call cleanup/discard: the worktree remains until the PR is merged
+   * (or the user manually discards). The caller is responsible for calling
+   * discard() after the PR is merged if branch-retention is off.
+   */
+  async pushAndPr(agentId: string, opts: PrOptions): Promise<PrResult> {
+    const rec = this.require(agentId);
+    // Push the branch to the remote
+    const pushResult = await this.runner(["push", opts.remote, rec.branch], { cwd: this.repoRoot });
+    if (pushResult.exitCode !== 0) {
+      throw new Error(`git push ${opts.remote} ${rec.branch} failed (${pushResult.exitCode}): ${pushResult.stderr.trim()}`);
+    }
+    // Create the PR via gh CLI (uses shellRunner, not runner)
+    const ghArgs: string[] = [
+      "gh", "pr", "create",
+      "--title", opts.title,
+      "--body", opts.body,
+      "--base", opts.base,
+      "--head", rec.branch,
+    ];
+    if (opts.draft) ghArgs.push("--draft");
+    const prResult = await this.shellRunner(ghArgs, { cwd: this.repoRoot });
+    if (prResult.exitCode !== 0) {
+      throw new Error(`gh pr create failed (${prResult.exitCode}): ${prResult.stderr.trim()}`);
+    }
+    return { prUrl: prResult.stdout.trim() };
+  }
+
   async discard(agentId: string): Promise<void> {
     await this.teardown(agentId, true);
   }
 
   async cleanup(agentId: string): Promise<void> {
-    await this.teardown(agentId, true);
+    await this.teardown(agentId, !this.retainBranchOnMerge);
   }
 
   private async teardown(agentId: string, deleteBranch: boolean): Promise<void> {
