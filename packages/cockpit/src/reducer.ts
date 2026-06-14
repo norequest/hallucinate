@@ -1,4 +1,4 @@
-import type { Agent, AgentState, OrchestratorEvent } from "@maestro/core";
+import { stateNeedsAttention, type Agent, type OrchestratorEvent } from "@maestro/core";
 import type { CardVM } from "./protocol.js";
 
 /** Max accumulated output chars kept per agent (keeps state snapshots bounded). */
@@ -12,17 +12,6 @@ export interface CockpitModel {
 
 export function initialModel(): CockpitModel {
   return { cards: new Map() };
-}
-
-function needsAttention(state: AgentState): boolean {
-  return (
-    state === "awaiting-approval" ||
-    state === "done" ||
-    state === "error" ||
-    state === "conflict" ||
-    state === "detached" ||
-    state === "merge-cleanup-failed"
-  );
 }
 
 function cardFromAgent(agent: Agent, prevOutput: string): CardVM {
@@ -40,7 +29,7 @@ function cardFromAgent(agent: Agent, prevOutput: string): CardVM {
     pendingApprovalId: agent.pendingApprovalId,
     approvalDetail: agent.approvalDetail,
     engineCapabilities: agent.engineCapabilities,
-    attention: needsAttention(agent.state),
+    attention: stateNeedsAttention(agent.state),
   };
 }
 

@@ -3,7 +3,7 @@ import { Orchestrator, type Role } from "@maestro/core";
 import { GitWorkspaceManager } from "@maestro/workspace";
 import { CopilotAdapter } from "@maestro/adapter-copilot";
 import { AcpAdapter } from "@maestro/adapter-acp";
-import { createCockpit } from "./controller.js";
+import { createCockpit, type MergeActionMessage } from "./controller.js";
 import { RosterTreeDataProvider } from "./roster.js";
 import { StageWebviewPanel } from "./stage.js";
 import { EventLogger } from "./persistence.js";
@@ -42,17 +42,29 @@ export function activate(context: vscode.ExtensionContext): void {
   const prModeEnabled = (): boolean =>
     vscode.workspace.getConfiguration("maestro").get<boolean>("prMode", false);
 
-  const handleMergeAction = async (msg: { type: string; agentId?: string }): Promise<void> => {
-    if (!msg.agentId) return;
+  // Typed as the WebviewToHost merge-action subset (not a widened {type:
+  // string}), so agentId is known-present and a renamed variant is a compile
+  // error.
+  const handleMergeAction = async (msg: MergeActionMessage): Promise<void> => {
     const agent = orch.getAgent(msg.agentId);
     if (!agent) return;
     if (msg.type === "resolve-conflict") {
       const files = agent.conflict?.files ?? [];
+      const { conflictFileBase, buildConflictResolveMessage } = await import("./merge-helpers.js");
+      const base = conflictFileBase(agent);
+      if (!base) {
+        // No worktree on disk: opening repo-root copies would show marker-free
+        // files. Warn instead of opening the wrong copy.
+        void vscode.window.showWarningMessage(
+          "Maestro: cannot open conflict files (the agent's worktree is unavailable). Resolve the merge manually.",
+        );
+        return;
+      }
       for (const relPath of files) {
-        const uri = vscode.Uri.joinPath(vscode.Uri.file(repoRoot), relPath);
+        // Conflict markers live in the agent's worktree, not the main repo root.
+        const uri = vscode.Uri.joinPath(vscode.Uri.file(base), relPath);
         await vscode.commands.executeCommand("vscode.open", uri);
       }
-      const { buildConflictResolveMessage } = await import("./merge-helpers.js");
       void vscode.window.showInformationMessage(buildConflictResolveMessage(files));
     } else if (msg.type === "finish-merge") {
       try {
@@ -83,6 +95,13 @@ export function activate(context: vscode.ExtensionContext): void {
           draft: vscode.workspace.getConfiguration("maestro").get<boolean>("prDraft", false),
         });
         void vscode.window.showInformationMessage(`PR created: ${result.prUrl}`);
+        // pushAndPr emits nothing through the orchestrator, so the card would
+        // not refresh on its own. Force a re-push of the current state so the UI
+        // is consistent. The branch is pushed; the local worktree stays so the
+        // existing Discard affordance can clean it up (we never delete the
+        // branch we just pushed). A dedicated "pr-created" terminal state is a
+        // follow-up that needs a core change.
+        cockpit.handle({ type: "ready" });
       } catch (err) {
         void vscode.window.showErrorMessage(`Create PR failed: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -112,8 +131,16 @@ export function activate(context: vscode.ExtensionContext): void {
       const message = error instanceof Error ? error.message : String(error);
       void vscode.window.showWarningMessage(`Maestro: could not restore previous session: ${message}`);
     }
-    const unsubPersist = orch.on((event) => eventLogger.write(event));
-    const unsubForget = orch.on((event) => {
+    // A SINGLE subscription persists every event and forgets on terminal
+    // states. EventLogger serializes write/forget per agent id, so the forget
+    // always runs after any pending write (no ghost-log resurrection race) and
+    // a write arriving after forget for a terminal id is dropped.
+    //
+    // Note: a `.conductor/.runtime/<id>.jsonl` log may contain sensitive agent
+    // scrollback (model output, tool I/O). The directory is gitignored; it is
+    // local-only and removed on merge/discard.
+    const unsubPersist = orch.on((event) => {
+      eventLogger.write(event);
       if (
         event.kind === "agent-updated" &&
         (event.agent.state === "merged" || event.agent.state === "discarded")
@@ -121,7 +148,7 @@ export function activate(context: vscode.ExtensionContext): void {
         void eventLogger.forget(event.agent.id);
       }
     });
-    context.subscriptions.push({ dispose: () => { unsubPersist(); unsubForget(); } });
+    context.subscriptions.push({ dispose: () => { unsubPersist(); } });
   })();
 
   context.subscriptions.push(

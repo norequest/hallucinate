@@ -21,6 +21,12 @@ describe("getStageHtml", () => {
   it("escapeHtml neutralizes markup", () => {
     expect(escapeHtml('<script>"&')).toBe("&lt;script&gt;&quot;&amp;");
   });
+  it("escapeHtml escapes the single quote (Issue 25)", () => {
+    expect(escapeHtml("it's a 'test'")).toBe("it&#39;s a &#39;test&#39;");
+  });
+  it("escapeHtml escapes the backtick (Issue 25)", () => {
+    expect(escapeHtml("a `b` c")).toBe("a &#96;b&#96; c");
+  });
 });
 
 describe("renderCardHTML", () => {

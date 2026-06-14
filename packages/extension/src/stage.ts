@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { CockpitState, WebviewToHost } from "@maestro/cockpit";
+import { isWebviewMessage, type CockpitState, type WebviewToHost } from "@maestro/cockpit";
 import { getStageHtml, makeNonce } from "./html.js";
 
 /** Singleton Stage webview panel. */
@@ -27,7 +27,12 @@ export class StageWebviewPanel {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview", "main.js")).toString();
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview", "style.css")).toString();
     webview.html = getStageHtml(scriptUri, styleUri, makeNonce(), webview.cspSource);
-    panel.webview.onDidReceiveMessage((msg: WebviewToHost) => this.onMessage(msg));
+    // The webview is a separate, untrusted JS context. Validate every inbound
+    // payload at the boundary and drop anything that is not a real
+    // WebviewToHost before forwarding it to the controller.
+    panel.webview.onDidReceiveMessage((msg: unknown) => {
+      if (isWebviewMessage(msg)) this.onMessage(msg);
+    });
     panel.onDidDispose(() => { this.panel = undefined; });
     // Best-effort first paint. The webview's own "ready" message (sent once its
     // script loads) is the guaranteed delivery: this early post may be dropped
