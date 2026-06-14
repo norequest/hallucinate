@@ -1,0 +1,51 @@
+{
+  "name": "@maestro/extension",
+  "displayName": "Maestro",
+  "description": "Conduct a team of AI coding agents in isolated git worktrees.",
+  "version": "0.0.0",
+  "publisher": "prixio",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "maestro", "title": "Maestro", "icon": "$(rocket)" }
+      ]
+    },
+    "views": {
+      "maestro": [
+        { "id": "maestro.roster", "name": "Roster" }
+      ]
+    },
+    "commands": [
+      { "command": "maestro.spawnAgent", "title": "Maestro: Spawn Agent", "icon": "$(add)" },
+      { "command": "maestro.openStage", "title": "Maestro: Open Stage" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "maestro.spawnAgent", "when": "view == maestro.roster", "group": "navigation" }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@maestro/core": "workspace:*",
+    "@maestro/cockpit": "workspace:*",
+    "@maestro/workspace": "workspace:*",
+    "@maestro/adapter-copilot": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
