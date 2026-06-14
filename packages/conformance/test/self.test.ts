@@ -59,7 +59,7 @@ const factory: AdapterFactory = () => {
   const adapter = new ControllableAdapter();
   return {
     adapter,
-    completeSucessfully: () => {
+    completeSuccessfully: () => {
       adapter.session?.push({ kind: "status", state: "working" });
       adapter.session?.push({ kind: "done", summary: "ok" });
       adapter.session?.end();

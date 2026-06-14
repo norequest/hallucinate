@@ -10,7 +10,7 @@ import type { EngineAdapter, Role, AgentEvent } from "@maestro/core";
 export type AdapterFactory = () => {
   adapter: EngineAdapter;
   /** Drive the adapter to emit a terminal `done` event. */
-  completeSucessfully(): void;
+  completeSuccessfully(): void;
   /** Drive the adapter to emit a terminal `error` event. */
   failWithError(): void;
   /** Drive the adapter to emit at least one `output` event. */
@@ -28,21 +28,29 @@ function makeRole(engineId: string): Role {
 
 function waitForTerminal(orch: Orchestrator, agentId: string): Promise<void> {
   return new Promise((resolve) => {
+    let unsub: (() => void) | undefined;
     const check = () => {
       const a = orch.getAgent(agentId);
-      if (a && isTerminalState(a.state)) resolve();
+      if (a && isTerminalState(a.state)) {
+        unsub?.();
+        resolve();
+      }
     };
-    orch.on(check);
+    unsub = orch.on(check);
     check();
   });
 }
 
 function waitForState(orch: Orchestrator, agentId: string, target: string): Promise<void> {
   return new Promise((resolve) => {
+    let unsub: (() => void) | undefined;
     const check = () => {
-      if (orch.getAgent(agentId)?.state === target) resolve();
+      if (orch.getAgent(agentId)?.state === target) {
+        unsub?.();
+        resolve();
+      }
     };
-    orch.on(check);
+    unsub = orch.on(check);
     check();
   });
 }
@@ -72,7 +80,7 @@ export function runConformanceSuite(label: string, factory: AdapterFactory): voi
     });
 
     it("streams events then terminates with done or error", async () => {
-      const { adapter, completeSucessfully, emitOutput } = factory();
+      const { adapter, completeSuccessfully, emitOutput } = factory();
       const orch = new Orchestrator({ maxParallelAgents: 1 }, new FakeWorkspaceProvider());
       orch.registerRole(makeRole(adapter.id));
       orch.registerAdapter(adapter);
@@ -86,7 +94,7 @@ export function runConformanceSuite(label: string, factory: AdapterFactory): voi
       await waitForState(orch, agent.id, "working");
 
       emitOutput("doing work\n");
-      completeSucessfully();
+      completeSuccessfully();
 
       await waitForTerminal(orch, agent.id);
 
@@ -111,7 +119,7 @@ export function runConformanceSuite(label: string, factory: AdapterFactory): voi
       await waitForState(orch, agent.id, "working");
       orch.stop(agent.id);
 
-      await new Promise((r) => setImmediate(r));
+      await waitForTerminal(orch, agent.id);
       const final = orch.getAgent(agent.id)!;
       expect(final.state).toBe("stopped");
     });

@@ -11,7 +11,7 @@ const factory: AdapterFactory = () => {
 
   return {
     adapter,
-    completeSucessfully: () => {
+    completeSuccessfully: () => {
       child = fake.child();
       child?.close(0);
     },
