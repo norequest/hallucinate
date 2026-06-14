@@ -20,7 +20,8 @@ function needsAttention(state: AgentState): boolean {
     state === "done" ||
     state === "error" ||
     state === "conflict" ||
-    state === "detached"
+    state === "detached" ||
+    state === "merge-cleanup-failed"
   );
 }
 

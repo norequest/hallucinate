@@ -35,16 +35,23 @@ function actions(card: CardVM): string {
   const stop = `<button data-action="stop" data-id="${id}">Stop</button>`;
   const merge = `<button data-action="merge" data-id="${id}">Merge</button>`;
   const discard = `<button data-action="discard" data-id="${id}">Discard</button>`;
+  const resolveConflict = `<button data-action="resolve-conflict" data-id="${id}">Resolve in Editor</button>`;
+  const finishMerge = `<button data-action="finish-merge" data-id="${id}">Finish Merge</button>`;
+  const createPr = `<button data-action="create-pr" data-id="${id}">Create PR</button>`;
+  const retryCleanup = `<button data-action="retry-cleanup" data-id="${id}">Retry Cleanup</button>`;
   switch (card.state) {
     case "working":
     case "awaiting-approval":
     case "preparing":
       return stop;
     case "done":
-      return `${merge} ${discard}`;
+      return `${merge} ${createPr} ${discard}`;
     case "detached":
       return `${merge} ${discard}`;
     case "conflict":
+      return `${resolveConflict} ${finishMerge} ${discard}`;
+    case "merge-cleanup-failed":
+      return `${retryCleanup} ${discard}`;
     case "error":
     case "stopped":
       return discard;
@@ -62,6 +69,9 @@ function detail(card: CardVM): string {
   if (card.state === "conflict" && card.conflictFiles) {
     const files = card.conflictFiles.map((f) => `<li>${escapeHtml(f)}</li>`).join("");
     return `<div class="conflict">Merge conflict in:</div><ul class="files">${files}</ul>`;
+  }
+  if (card.state === "merge-cleanup-failed" && card.error) {
+    return `<pre class="error">${escapeHtml(card.error)}</pre><div class="cleanup-note">The merge succeeded (your code is in the branch), but the worktree cleanup failed. Click "Retry Cleanup" to remove the worktree, or "Discard" to clean up manually.</div>`;
   }
   if (card.state === "error" && card.error) {
     return `<pre class="error">${escapeHtml(card.error)}</pre>`;

@@ -28,4 +28,8 @@ describe("roster mapping", () => {
   it("returns debug-disconnect icon for detached state", () => {
     expect(cardIcon("detached")).toBe("debug-disconnect");
   });
+
+  it("returns warning icon for merge-cleanup-failed state", () => {
+    expect(cardIcon("merge-cleanup-failed")).toBe("warning");
+  });
 });
