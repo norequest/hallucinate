@@ -15,6 +15,28 @@ import {
 } from "@maestro/config";
 import type { ConfigGateway } from "./library-controller.js";
 
+/**
+ * Refuse any name that is not a single, clean path segment before it is joined
+ * onto a filesystem path. This is the R6 containment guard at the source: a name
+ * carrying a separator or "." / ".." could otherwise traverse out of
+ * .conductor/ (the writer's removeDir guard is only a backstop). Skill and role
+ * names that fail this are rejected, never sanitized, so a write can never land
+ * outside .conductor/<kind>/<name>.
+ */
+function assertSafeSegment(value: string, kind: string): void {
+  if (
+    value.length === 0 ||
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\\") ||
+    value.includes("\0") ||
+    value.includes(nodePath.sep)
+  ) {
+    throw new Error(`Unsafe ${kind} name "${value}": must be a single path segment.`);
+  }
+}
+
 export function makeConfigGateway(repoRoot: string): ConfigGateway {
   return {
     async loadSkills() {
@@ -50,6 +72,7 @@ export function makeConfigGateway(repoRoot: string): ConfigGateway {
     },
 
     async saveSkill(manifest, body) {
+      assertSafeSegment(manifest.name, "skill");
       const fsWriter = await makeNodeFsWriter();
       const skillDir = nodePath.join(repoRoot, ".conductor", "skills", manifest.name);
       await fsWriter.mkdir(skillDir);
@@ -58,6 +81,7 @@ export function makeConfigGateway(repoRoot: string): ConfigGateway {
     },
 
     async deleteSkill(name) {
+      assertSafeSegment(name, "skill");
       const fsWriter = await makeNodeFsWriter();
       const skillDir = nodePath.join(repoRoot, ".conductor", "skills", name);
       await fsWriter.removeDir(skillDir);
@@ -80,8 +104,9 @@ export function makeConfigGateway(repoRoot: string): ConfigGateway {
       // The loader reads all *.yaml files in .conductor/roles/ so the exact
       // filename does not need to match, but mirroring the scaffolder's
       // convention (implementer.yaml for role "Implementer") keeps it tidy.
-      const safeFileName = roleName.toLowerCase().replace(/\s+/g, "-") + ".yaml";
-      const rolePath = nodePath.join(repoRoot, ".conductor", "roles", safeFileName);
+      const baseName = roleName.toLowerCase().replace(/\s+/g, "-");
+      assertSafeSegment(baseName, "role");
+      const rolePath = nodePath.join(repoRoot, ".conductor", "roles", `${baseName}.yaml`);
 
       const fsWriter = await makeNodeFsWriter();
       await fsWriter.writeFile(rolePath, serialized);
