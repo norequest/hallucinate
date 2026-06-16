@@ -9,6 +9,8 @@ export interface FsReader {
   readFile(path: string): Promise<string>;
   /** Returns base names of files with the given extension inside a directory, or [] if the dir does not exist. */
   listFiles(dir: string, ext: string): Promise<string[]>;
+  /** Returns base names of immediate subdirectories inside a directory, or [] if the dir does not exist. Symlinked entries are skipped. */
+  listDirs(dir: string): Promise<string[]>;
   /** Returns true if the path exists (file or directory). */
   exists(path: string): Promise<boolean>;
 }
@@ -188,6 +190,19 @@ export async function makeNodeFsReader(): Promise<FsReader> {
         // a symlinked .yaml can never be listed and then read). Issue 27 / S8.
         return entries
           .filter((e) => !e.isSymbolicLink() && e.isFile() && e.name.endsWith(ext))
+          .map((e) => e.name)
+          .sort();
+      } catch {
+        return [];
+      }
+    },
+    async listDirs(dir: string): Promise<string[]> {
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        // Skip symlinks: a symlinked subdir could escape the .conductor boundary
+        // (Issue 27 / S8). isDirectory() is already false for them, but be explicit.
+        return entries
+          .filter((e) => !e.isSymbolicLink() && e.isDirectory())
           .map((e) => e.name)
           .sort();
       } catch {

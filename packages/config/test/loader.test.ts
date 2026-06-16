@@ -14,6 +14,19 @@ function makeFakeFs(files: Record<string, string>): FsReader {
         .map((p) => p.slice(dir.length + 1))
         .sort();
     },
+    async listDirs(dir: string): Promise<string[]> {
+      const result = new Set<string>();
+      for (const p of Object.keys(files)) {
+        if (p.startsWith(dir + "/")) {
+          const rest = p.slice(dir.length + 1);
+          const slash = rest.indexOf("/");
+          if (slash !== -1) {
+            result.add(rest.slice(0, slash));
+          }
+        }
+      }
+      return [...result].sort();
+    },
     async exists(p: string): Promise<boolean> {
       if (Object.keys(files).some((f) => f === p || f.startsWith(p + "/"))) {
         return true;
