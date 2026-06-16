@@ -7,10 +7,11 @@ function fakeOrch() {
   let listener: ((e: OrchestratorEvent) => void) | undefined;
   const calls: string[] = [];
   const spawnArgs: Array<[string, string, { goal?: string; engineId?: string; model?: string } | undefined]> = [];
+  const dispatchArgs: DispatchSpec[] = [];
   const orch: OrchestratorLike = {
     on(l) { listener = l; return () => { listener = undefined; }; },
     spawn: (r, d, opts?) => { calls.push(`spawn:${r}:${d}`); spawnArgs.push([r, d, opts]); return {} as Agent; },
-    dispatch: (_spec: DispatchSpec) => { calls.push(`dispatch`); return {} as Agent; },
+    dispatch: (spec: DispatchSpec) => { calls.push(`dispatch`); dispatchArgs.push(spec); return {} as Agent; },
     steer: (id, i) => { calls.push(`steer:${id}:${i}`); },
     approve: (id, ap, dec) => { calls.push(`approve:${id}:${ap}:${dec}`); },
     stop: (id) => { calls.push(`stop:${id}`); },
@@ -20,7 +21,7 @@ function fakeOrch() {
     retryCleanup: async (id: string) => { calls.push(`retryCleanup:${id}`); },
     markPrCreated: async (id: string) => { calls.push(`markPrCreated:${id}`); },
   };
-  return { orch, calls, spawnArgs, emit: (e: OrchestratorEvent) => listener?.(e) };
+  return { orch, calls, spawnArgs, dispatchArgs, emit: (e: OrchestratorEvent) => listener?.(e) };
 }
 const agent = (id: string): Agent => ({
   id, task: { id: `t-${id}`, description: "x", roleName: "Implementer" },
@@ -130,5 +131,38 @@ describe("createCockpit", () => {
     const after = states.length;
     emit({ kind: "agent-added", agent: agent("a2") });
     expect(states.length).toBe(after); // no more pushes after dispose
+  });
+
+  it("routes a preset dispatch to orch.dispatch", () => {
+    const { orch, dispatchArgs } = fakeOrch();
+    const cockpit = createCockpit(orch, () => {});
+    cockpit.handle({ type: "dispatch", roleName: "Test Author", description: "write tests", goal: "so it is tested" });
+    expect(dispatchArgs).toHaveLength(1);
+    expect(dispatchArgs[0]).toMatchObject({
+      roleName: "Test Author",
+      description: "write tests",
+      goal: "so it is tested",
+    });
+  });
+
+  it("routes an ad-hoc dispatch (newRoleName) to orch.dispatch", () => {
+    const { orch, dispatchArgs } = fakeOrch();
+    const cockpit = createCockpit(orch, () => {});
+    cockpit.handle({ type: "dispatch", newRoleName: "Doc Writer", engineId: "copilot", description: "docs" });
+    expect(dispatchArgs).toHaveLength(1);
+    expect(dispatchArgs[0]).toMatchObject({
+      newRoleName: "Doc Writer",
+      engineId: "copilot",
+      description: "docs",
+    });
+  });
+
+  it("a throwing dispatch is routed to onError, not thrown", () => {
+    const { orch } = fakeOrch();
+    (orch as any).dispatch = () => { throw new Error("Unknown role: Ghost"); };
+    const onError = vi.fn();
+    const cockpit = createCockpit(orch, () => {}, onError);
+    cockpit.handle({ type: "dispatch", roleName: "Ghost", description: "x" });
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("Unknown role"));
   });
 });
