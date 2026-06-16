@@ -122,6 +122,53 @@ describe("loadConductorDir", () => {
     expect(result.roles).toHaveLength(0);
   });
 
+  it("resolves soul when souls/reviewer.md is present and emits no soul-related warning", async () => {
+    const roleWithSoulYaml = `
+name: Reviewer
+instructions: Review the diff.
+engine:
+  id: copilot
+autonomy: manual
+soul: reviewer
+`.trim();
+
+    const fs = makeFakeFs({
+      [`${ROLES_DIR}/reviewer.yaml`]: roleWithSoulYaml,
+      [`${ROOT}/.conductor/souls/reviewer.md`]: "## Identity\nI am a reviewer.\n",
+      [`${ROOT}/.conductor`]: "",
+    });
+    const result = await loadConductorDir(ROOT, fs);
+    expect(result.roles).toHaveLength(1);
+    // No soul-related warning when file is present
+    const soulWarnings = result.warnings.flatMap((w) => w.warnings).filter((w) => w.field === "soul");
+    expect(soulWarnings).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("warns (not errors) when soul file is referenced but missing, and still loads the role", async () => {
+    const roleWithSoulYaml = `
+name: Reviewer
+instructions: Review the diff.
+engine:
+  id: copilot
+autonomy: manual
+soul: missing-soul
+`.trim();
+
+    const fs = makeFakeFs({
+      [`${ROLES_DIR}/reviewer.yaml`]: roleWithSoulYaml,
+      [`${ROOT}/.conductor`]: "",
+    });
+    const result = await loadConductorDir(ROOT, fs);
+    // The role should still be loaded
+    expect(result.roles).toHaveLength(1);
+    // A warning about the missing soul should exist
+    const allWarnings = result.warnings.flatMap((w) => w.warnings);
+    expect(allWarnings.some((w) => w.field === "soul")).toBe(true);
+    // No hard errors
+    expect(result.errors).toHaveLength(0);
+  });
+
   it("collects multiple role files in alphabetical order", async () => {
     const reviewerYaml = `
 name: Reviewer

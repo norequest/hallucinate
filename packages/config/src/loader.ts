@@ -2,6 +2,7 @@ import * as nodePath from "node:path";
 import { parseRoleYaml, parseTeamYaml, parseConfigYaml } from "./parser.js";
 import type { Role, Team, OrchestratorConfig } from "@maestro/core";
 import type { ValidationWarning } from "./types.js";
+import { loadSoul } from "./souls.js";
 
 /** Minimal async fs interface; injectable for offline testing. */
 export interface FsReader {
@@ -55,9 +56,24 @@ export async function loadConductorDir(
       const text = await fs.readFile(filePath);
       const parsed = parseRoleYaml(text, source);
       if (parsed.role.ok) {
-        result.roles.push(parsed.role.value);
-        if (parsed.role.warnings.length > 0) {
-          result.warnings.push({ source, warnings: parsed.role.warnings });
+        const roleWarnings: ValidationWarning[] = [...parsed.role.warnings];
+        const role = parsed.role.value;
+
+        // Resolve soul reference if present. A missing file is a warning, not an error.
+        if (role.soul !== undefined) {
+          const soulResult = await loadSoul(workspaceRoot, role.soul, fs);
+          if ("error" in soulResult) {
+            roleWarnings.push({
+              field: "soul",
+              message: `soul "${role.soul}" referenced in role "${role.name}" was not found: ${soulResult.error}`,
+            });
+          }
+          // The role.soul name stays as-is regardless; extension resolves at spawn.
+        }
+
+        result.roles.push(role);
+        if (roleWarnings.length > 0) {
+          result.warnings.push({ source, warnings: roleWarnings });
         }
       } else {
         result.errors.push({ source, errors: parsed.role.errors });

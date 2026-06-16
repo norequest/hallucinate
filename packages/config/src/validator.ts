@@ -1,4 +1,4 @@
-import type { Role, Team, OrchestratorConfig } from "@maestro/core";
+import type { Role, Team, OrchestratorConfig, ToolGrant } from "@maestro/core";
 import type { ValidationResult, ValidationWarning } from "./types.js";
 import { KNOWN_ENGINE_IDS } from "./types.js";
 
@@ -25,6 +25,107 @@ const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 /** Matches ASCII control characters (\x00-\x1f), which must never appear in a role name. */
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x1f]/;
+
+/** Allowed read-only builtins. */
+const VALID_READ_BUILTINS = new Set<string>(["Read", "Search"]);
+/** Allowed write builtins. Write is off by default; absence means read-only. */
+const VALID_WRITE_BUILTINS = new Set<string>(["Edit", "Run", "Git"]);
+
+/**
+ * Validate a raw tools grant object. Returns the validated ToolGrant on success.
+ * An absent write block is accepted (means read-only). Unknown builtin names are rejected.
+ */
+export function validateTools(raw: unknown): ValidationResult<ToolGrant> {
+  const errors: string[] = [];
+  const warnings: ValidationWarning[] = [];
+
+  if (!isRecord(raw)) {
+    return { ok: false, errors: ["tools must be an object"], warnings };
+  }
+
+  const grant: ToolGrant = {};
+
+  if (raw["builtins"] !== undefined) {
+    if (!isRecord(raw["builtins"])) {
+      errors.push("tools.builtins must be an object if provided");
+    } else {
+      const builtinsRaw = raw["builtins"] as Record<string, unknown>;
+      const readList = builtinsRaw["read"];
+      const writeList = builtinsRaw["write"];
+
+      const readBuiltins: ("Read" | "Search")[] = [];
+      if (readList !== undefined) {
+        if (!Array.isArray(readList)) {
+          errors.push("tools.builtins.read must be an array of strings if provided");
+        } else {
+          for (const item of readList) {
+            if (!isString(item)) {
+              errors.push(`tools.builtins.read entries must be strings; got ${JSON.stringify(item)}`);
+            } else if (!VALID_READ_BUILTINS.has(item)) {
+              errors.push(`tools.builtins.read: "${item}" is not a valid read builtin; valid: ${[...VALID_READ_BUILTINS].join(", ")}`);
+            } else {
+              readBuiltins.push(item as "Read" | "Search");
+            }
+          }
+        }
+      }
+
+      const writeBuiltins: ("Edit" | "Run" | "Git")[] = [];
+      if (writeList !== undefined) {
+        if (!Array.isArray(writeList)) {
+          errors.push("tools.builtins.write must be an array of strings if provided");
+        } else {
+          for (const item of writeList) {
+            if (!isString(item)) {
+              errors.push(`tools.builtins.write entries must be strings; got ${JSON.stringify(item)}`);
+            } else if (!VALID_WRITE_BUILTINS.has(item)) {
+              errors.push(`tools.builtins.write: "${item}" is not a valid write builtin; valid: ${[...VALID_WRITE_BUILTINS].join(", ")}`);
+            } else {
+              writeBuiltins.push(item as "Edit" | "Run" | "Git");
+            }
+          }
+        }
+      }
+
+      if (errors.length === 0) {
+        grant.builtins = {
+          ...(readBuiltins.length > 0 ? { read: readBuiltins } : {}),
+          ...(writeBuiltins.length > 0 ? { write: writeBuiltins } : {}),
+        };
+      }
+    }
+  }
+
+  if (raw["mcp"] !== undefined) {
+    if (!Array.isArray(raw["mcp"])) {
+      errors.push("tools.mcp must be an array if provided");
+    } else {
+      const mcpEntries: ToolGrant["mcp"] = [];
+      for (const item of raw["mcp"]) {
+        if (!isRecord(item)) {
+          errors.push(`tools.mcp entries must be objects; got ${JSON.stringify(item)}`);
+        } else if (!isString(item["server"]) || (item["server"] as string).trim() === "") {
+          errors.push("tools.mcp entries must have a non-empty string server field");
+        } else {
+          mcpEntries.push({
+            server: (item["server"] as string).trim(),
+            ...(item["read"] !== undefined ? { read: Boolean(item["read"]) } : {}),
+            ...(item["write"] !== undefined ? { write: Boolean(item["write"]) } : {}),
+          });
+        }
+      }
+      if (errors.length === 0 && mcpEntries.length > 0) {
+        grant.mcp = mcpEntries;
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors, warnings };
+  }
+
+  return { ok: true, value: grant, warnings };
+}
 
 export function validateRole(raw: unknown): ValidationResult<Role> {
   const errors: string[] = [];
@@ -101,6 +202,26 @@ export function validateRole(raw: unknown): ValidationResult<Role> {
     }
   }
 
+  // Validate optional tools grant.
+  let validatedTools: ToolGrant | undefined;
+  if (raw["tools"] !== undefined) {
+    const toolsResult = validateTools(raw["tools"]);
+    if (!toolsResult.ok) {
+      for (const e of toolsResult.errors) {
+        errors.push(e);
+      }
+    } else {
+      validatedTools = toolsResult.value;
+    }
+  }
+
+  // Validate optional soul reference (a string name; resolution is loader-time).
+  if (raw["soul"] !== undefined) {
+    if (!isString(raw["soul"]) || (raw["soul"] as string).trim() === "") {
+      errors.push("role.soul must be a non-empty string if provided");
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors, warnings };
   }
@@ -117,6 +238,8 @@ export function validateRole(raw: unknown): ValidationResult<Role> {
     },
     autonomy: raw["autonomy"] as Role["autonomy"],
     ...(raw["skills"] !== undefined ? { skills: raw["skills"] as string[] } : {}),
+    ...(validatedTools !== undefined ? { tools: validatedTools } : {}),
+    ...(raw["soul"] !== undefined ? { soul: (raw["soul"] as string).trim() } : {}),
   };
 
   return { ok: true, value: role, warnings };

@@ -69,6 +69,34 @@ describe("serializeRole skills round-trip", () => {
   });
 });
 
+describe("serializeRole tools and soul round-trip", () => {
+  it("preserves read list, write list, mcp array, and soul name through serialize then parseRoleYaml", () => {
+    const withTools: Role = {
+      ...implementer,
+      soul: "reviewer",
+      tools: {
+        builtins: { read: ["Read", "Search"], write: ["Git"] },
+        mcp: [{ server: "sec-kit", read: true }],
+      },
+    };
+    const yaml = serializeRole(withTools);
+    const parsed = parseRoleYaml(yaml, "test");
+    expect(parsed.role.ok).toBe(true);
+    if (parsed.role.ok) {
+      expect(parsed.role.value.soul).toBe("reviewer");
+      expect(parsed.role.value.tools?.builtins?.read).toContain("Read");
+      expect(parsed.role.value.tools?.builtins?.write).toContain("Git");
+      expect(parsed.role.value.tools?.mcp?.[0]?.server).toBe("sec-kit");
+    }
+  });
+
+  it("produces no tools: or soul: key for a bare role (byte-identical to before)", () => {
+    const yaml = serializeRole(implementer);
+    expect(yaml).not.toContain("tools:");
+    expect(yaml).not.toContain("soul:");
+  });
+});
+
 describe("serializeSkill", () => {
   it("round-trips name, description, allowedTools, and body through parseSkillMarkdown", () => {
     const manifest = {

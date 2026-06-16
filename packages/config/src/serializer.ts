@@ -7,6 +7,23 @@ import type { SkillManifest } from "./skill-types.js";
  * Produces clean, human-readable output with no extra blank lines.
  */
 export function serializeRole(role: Role): string {
+  // Build tools YAML representation when present.
+  let toolsDoc: Record<string, unknown> | undefined;
+  if (role.tools !== undefined) {
+    const builtins: Record<string, unknown> = {};
+    if (role.tools.builtins?.read !== undefined && role.tools.builtins.read.length > 0) {
+      builtins["read"] = role.tools.builtins.read;
+    }
+    if (role.tools.builtins?.write !== undefined && role.tools.builtins.write.length > 0) {
+      builtins["write"] = role.tools.builtins.write;
+    }
+    const mcpList = role.tools.mcp;
+    toolsDoc = {
+      ...(Object.keys(builtins).length > 0 ? { builtins } : {}),
+      ...(mcpList !== undefined && mcpList.length > 0 ? { mcp: mcpList } : {}),
+    };
+  }
+
   const doc: Record<string, unknown> = {
     name: role.name,
     instructions: role.instructions,
@@ -15,6 +32,8 @@ export function serializeRole(role: Role): string {
       : { id: role.engine.id },
     autonomy: role.autonomy,
     ...(role.skills !== undefined ? { skills: role.skills } : {}),
+    ...(toolsDoc !== undefined ? { tools: toolsDoc } : {}),
+    ...(role.soul !== undefined ? { soul: role.soul } : {}),
   };
   return stringifyYaml(doc, { lineWidth: 120 });
 }

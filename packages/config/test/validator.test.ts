@@ -197,6 +197,69 @@ describe("validateRole skills field", () => {
   });
 });
 
+describe("validateRole tools and soul fields", () => {
+  it("accepts a tools grant with only a read list (no write block means read-only)", () => {
+    const result = validateRole({
+      ...validRoleRaw,
+      tools: { builtins: { read: ["Read", "Search"] } },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // write must be absent or empty when not specified
+      const writeList = result.value.tools?.builtins?.write ?? [];
+      expect(writeList).toHaveLength(0);
+    }
+  });
+
+  it("errors when tools.builtins.write contains an unknown tool name", () => {
+    const result = validateRole({
+      ...validRoleRaw,
+      tools: { builtins: { write: ["Deploy"] } },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.toLowerCase().includes("deploy") || e.includes("tool"))).toBe(true);
+    }
+  });
+
+  it("accepts an optional soul: name without resolving it (loader resolves later)", () => {
+    const result = validateRole({ ...validRoleRaw, soul: "reviewer" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.soul).toBe("reviewer");
+    }
+  });
+
+  it("omits tools from value when tools is absent (omit-when-absent)", () => {
+    const result = validateRole(validRoleRaw);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.tools).toBeUndefined();
+    }
+  });
+
+  it("omits soul from value when soul is absent", () => {
+    const result = validateRole(validRoleRaw);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.soul).toBeUndefined();
+    }
+  });
+
+  it("does NOT error on unknown soul name (that is a loader warning, not validator error)", () => {
+    const result = validateRole({ ...validRoleRaw, soul: "nonexistent-soul" });
+    expect(result.ok).toBe(true);
+  });
+
+  it("engine-id hard ERROR path is untouched (regression guard)", () => {
+    const result = validateRole({ ...validRoleRaw, soul: "reviewer", tools: { builtins: { read: ["Read"] } }, engine: { id: "totally-unknown" } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.includes("engine.id"))).toBe(true);
+    }
+  });
+});
+
 describe("validateOrchestratorConfig", () => {
   it("accepts an empty object and defaults maxParallelAgents to 3", () => {
     const result = validateOrchestratorConfig({});
