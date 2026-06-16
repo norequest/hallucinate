@@ -38,8 +38,8 @@ function renderEnginePills(options: ComposerOptions): string {
 
 /**
  * Pure HTML-string renderer for the composer overlay panel.
- * Every role-sourced string (role name, instructions snippet, team name)
- * is run through escapeHtml before being embedded in markup.
+ * Every role-sourced string (role name, instructions snippet) is run through
+ * escapeHtml before being embedded in markup, in both text and attribute context.
  */
 export function renderComposerHTML(options: ComposerOptions): string {
   return `<div class="composer-panel" role="dialog" aria-modal="true" aria-label="Dispatch a new agent">

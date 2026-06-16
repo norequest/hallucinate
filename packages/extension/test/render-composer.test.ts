@@ -35,5 +35,18 @@ describe("renderComposerHTML", () => {
     expect(html).not.toContain("<img src=x>");
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("&lt;img");
+    // The role name also rides a data-role="..." attribute; a raw payload there
+    // would break out of the attribute. Confirm it is escaped in that context too.
+    expect(html).not.toContain('data-role="<img');
+  });
+
+  it("escapes a quote-bearing role name so it cannot break out of an attribute", () => {
+    const evil = composerOptions(
+      [{ name: 'evil" onmouseover="x', instructions: "", engine: { id: "copilot" }, autonomy: "manual" }],
+      [],
+    );
+    const html = renderComposerHTML(evil);
+    expect(html).not.toContain('onmouseover="x');
+    expect(html).toContain("&quot;");
   });
 });
