@@ -68,7 +68,22 @@ export type WebviewToHost =
   | { type: "resolve-conflict"; agentId: string }
   | { type: "finish-merge"; agentId: string }
   | { type: "create-pr"; agentId: string }
-  | { type: "retry-cleanup"; agentId: string };
+  | { type: "retry-cleanup"; agentId: string }
+  | {
+      type: "dispatch";
+      /** A registered/preset role to spawn. */
+      roleName?: string;
+      /** A free-text ad-hoc role name to register then spawn. */
+      newRoleName?: string;
+      /** Engine family id; validated against KNOWN_ENGINE_IDS host-side. */
+      engineId?: string;
+      /** Engine model variant, e.g. "claude-sonnet-4.5" | "gpt-5" | "o3" | "gemini". */
+      model?: string;
+      /** The "why" (so that ...); the faint italic card line. */
+      goal?: string;
+      /** The concrete task instruction. */
+      description: string;
+    };
 
 /** Messages that carry an `agentId: string`. */
 const AGENT_ID_TYPES = new Set([
@@ -87,6 +102,10 @@ const AGENT_ID_TYPES = new Set([
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function isOptString(value: unknown): boolean {
+  return value === undefined || isString(value);
 }
 
 /**
@@ -130,6 +149,15 @@ export function isWebviewMessage(msg: unknown): msg is WebviewToHost {
         isString(m["agentId"]) &&
         isString(m["approvalId"]) &&
         (m["decision"] === "allow" || m["decision"] === "deny")
+      );
+    case "dispatch":
+      return (
+        isString(m["description"]) &&
+        isOptString(m["roleName"]) &&
+        isOptString(m["newRoleName"]) &&
+        isOptString(m["engineId"]) &&
+        isOptString(m["model"]) &&
+        isOptString(m["goal"])
       );
     default:
       return false;

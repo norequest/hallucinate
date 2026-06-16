@@ -71,3 +71,20 @@ describe("isWebviewMessage runtime guard", () => {
     expect(isWebviewMessage({ type: "approve", agentId: "a1", approvalId: "r1", decision: "maybe" })).toBe(false);
   });
 });
+
+describe("isWebviewMessage · dispatch", () => {
+  it("accepts a preset dispatch (roleName + description)", () => {
+    expect(isWebviewMessage({ type: "dispatch", roleName: "Test Author", description: "write tests" })).toBe(true);
+  });
+  it("accepts an ad-hoc dispatch (newRoleName + description) with engine + goal", () => {
+    expect(isWebviewMessage({ type: "dispatch", newRoleName: "Doc Writer", engineId: "copilot", model: "gpt-5", goal: "so the API is documented", description: "document the public API" })).toBe(true);
+  });
+  it("requires a string description and rejects wrong-typed fields", () => {
+    expect(isWebviewMessage({ type: "dispatch", roleName: "X" })).toBe(false);
+    expect(isWebviewMessage({ type: "dispatch", description: 7 })).toBe(false);
+    expect(isWebviewMessage({ type: "dispatch", description: "ok", engineId: 9 })).toBe(false);
+  });
+  it("dispatch carries no agentId (validates without one)", () => {
+    expect(isWebviewMessage({ type: "dispatch", roleName: "X", description: "y" })).toBe(true);
+  });
+});
