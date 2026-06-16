@@ -1,5 +1,8 @@
 import type { AgentState } from "@maestro/core";
 
+/** Which column on the Conducting Board this card belongs to. */
+export type Lane = "working" | "needsYou" | "conflict" | "done";
+
 /** A single agent's renderable state in the cockpit. Pure data; the UI renders it verbatim. */
 export interface CardVM {
   id: string;
