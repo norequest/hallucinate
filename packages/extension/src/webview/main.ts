@@ -1,5 +1,5 @@
 import type { CockpitState, HostToWebview, WebviewToHost } from "@maestro/cockpit";
-import { renderCardHTML } from "../render.js";
+import { renderBoard, renderDrawer } from "../render.js";
 
 interface VsCodeApi {
   postMessage(msg: WebviewToHost): void;
@@ -11,10 +11,24 @@ const root = document.getElementById("root");
 
 function render(state: CockpitState): void {
   if (!root) return;
-  root.innerHTML = state.cards.length
-    ? state.cards.map(renderCardHTML).join("")
+  const board = state.cards.length
+    ? renderBoard(state)
     : `<p class="empty">No agents yet. Use the Roster's + (Spawn Agent) to start one.</p>`;
+  root.innerHTML = `${board}${renderDrawer(state)}`;
+  tickElapsed();
 }
+
+function tickElapsed(): void {
+  const now = Date.now();
+  document.querySelectorAll<HTMLElement>(".elapsed[data-started]").forEach((el) => {
+    const started = Number(el.dataset["started"]);
+    if (!Number.isFinite(started)) return;
+    const s = Math.max(0, Math.floor((now - started) / 1000));
+    el.textContent = `${Math.floor(s / 60)}m ${s % 60}s`;
+  });
+}
+
+setInterval(tickElapsed, 1000);
 
 window.addEventListener("message", (e: MessageEvent<HostToWebview>) => {
   if (e.data.type === "state") render(e.data.state);
@@ -47,6 +61,31 @@ document.addEventListener("submit", (e) => {
 document.addEventListener("click", (e) => {
   const target = e.target;
   if (!(target instanceof HTMLElement)) return;
+
+  // 1. Local: drawer tab switching.
+  const tabBtn = target.closest<HTMLElement>(".tab[data-tab]");
+  if (tabBtn) {
+    const tabName = tabBtn.dataset["tab"];
+    const drawer = tabBtn.closest<HTMLElement>(".drawer");
+    if (drawer && tabName) {
+      drawer.querySelectorAll<HTMLElement>(".tab").forEach((t) => t.classList.remove("active"));
+      tabBtn.classList.add("active");
+      drawer.querySelectorAll<HTMLElement>(".tab-body").forEach((body) => {
+        body.hidden = body.dataset["tab"] !== tabName;
+      });
+    }
+    return;
+  }
+
+  // 2. Local: close-drawer.
+  const closeBtn = target.closest<HTMLElement>('[data-action="close-drawer"]');
+  if (closeBtn) {
+    const drawer = document.querySelector(".drawer");
+    if (drawer) drawer.remove();
+    return;
+  }
+
+  // 3. Host-bound action delegation (verbatim from old main.ts).
   const btn = target.closest<HTMLElement>("[data-action]");
   if (btn) {
     const id = btn.dataset["id"];
@@ -79,6 +118,8 @@ document.addEventListener("click", (e) => {
     }
     return;
   }
+
+  // 4. Focus on card click — post focus message for focused card.
   const card = target.closest<HTMLElement>(".card");
   const cardId = card?.dataset["id"];
   if (cardId) vscode.postMessage({ type: "focus", agentId: cardId });
