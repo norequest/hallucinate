@@ -155,6 +155,48 @@ describe("validateTeam", () => {
   });
 });
 
+describe("validateRole skills field", () => {
+  it("carries a well-formed skills array onto value.skills", () => {
+    const result = validateRole({ ...validRoleRaw, skills: ["run-tests", "openapi"] });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.skills).toEqual(["run-tests", "openapi"]);
+    }
+  });
+
+  it("leaves value.skills undefined when skills is absent", () => {
+    const result = validateRole(validRoleRaw);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.skills).toBeUndefined();
+    }
+  });
+
+  it("errors when skills is a string (not an array)", () => {
+    const result = validateRole({ ...validRoleRaw, skills: "run-tests" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.includes("skills"))).toBe(true);
+    }
+  });
+
+  it("errors when skills is an array with non-string entries", () => {
+    const result = validateRole({ ...validRoleRaw, skills: [1, 2] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.includes("skills"))).toBe(true);
+    }
+  });
+
+  it("unknown engine id is still a hard error (regression guard for engine-id path)", () => {
+    const result = validateRole({ ...validRoleRaw, skills: ["run-tests"], engine: { id: "totally-unknown" } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.includes("engine.id"))).toBe(true);
+    }
+  });
+});
+
 describe("validateOrchestratorConfig", () => {
   it("accepts an empty object and defaults maxParallelAgents to 3", () => {
     const result = validateOrchestratorConfig({});

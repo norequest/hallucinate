@@ -89,6 +89,18 @@ export function validateRole(raw: unknown): ValidationResult<Role> {
     errors.push(`role.autonomy must be one of: ${validAutonomy.join(", ")}`);
   }
 
+  // Validate optional skills array.
+  // Unknown skill names are NOT checked here (no manifests in scope at validation
+  // time); the unknown-name WARNING is raised by the loader/index after loadSkills
+  // resolves names, mirroring how validateTeam handles unknown role references.
+  if (raw["skills"] !== undefined) {
+    if (!Array.isArray(raw["skills"])) {
+      errors.push("role.skills must be an array of strings if provided");
+    } else if (!raw["skills"].every(isString)) {
+      errors.push("role.skills entries must all be strings");
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors, warnings };
   }
@@ -104,6 +116,7 @@ export function validateRole(raw: unknown): ValidationResult<Role> {
         : {}),
     },
     autonomy: raw["autonomy"] as Role["autonomy"],
+    ...(raw["skills"] !== undefined ? { skills: raw["skills"] as string[] } : {}),
   };
 
   return { ok: true, value: role, warnings };
