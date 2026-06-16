@@ -10,3 +10,4 @@ export { FakeEngineAdapter, FakeSession } from "./fake-adapter.js";
 export { FakeWorkspaceProvider, FakeWorkspaceManager, isWorkspaceManager } from "./workspace.js";
 export type { WorkspaceProvider, WorkspaceManager } from "./workspace.js";
 export * from "./compose.js";
+export * from "./tools-select.js";
