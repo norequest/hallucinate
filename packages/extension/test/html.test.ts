@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CardVM } from "@maestro/cockpit";
 import { getStageHtml, escapeHtml, makeNonce } from "../src/html.js";
-import { renderCardHTML } from "../src/render.js";
+import { renderCardHTML, renderDrawer } from "../src/render.js";
 
 function card(over: Partial<CardVM> = {}): CardVM {
   return { id: "a1", roleName: "Implementer", engineId: "copilot", state: "working", output: "", attention: false, lane: "working", taskDescription: "do it", ...over };
@@ -31,29 +31,35 @@ describe("getStageHtml", () => {
 
 describe("renderCardHTML", () => {
   it("shows live output while working and a Stop control", () => {
-    const html = renderCardHTML(card({ output: "compiling..." }));
+    // Card carries the task/lane; actions + output live in the drawer.
+    const c = card({ output: "compiling...", id: "a1" });
+    const html = renderDrawer({ cards: [c], focusedId: "a1" });
     expect(html).toContain("compiling...");
     expect(html).toContain('data-action="stop"');
   });
   it("shows summary + diff files + Merge/Discard when done", () => {
-    const html = renderCardHTML(card({ state: "done", attention: true, summary: "did it", diff: { files: ["a.ts", "b.ts"], patch: "P" } }));
+    const c = card({ id: "a1", state: "done", attention: true, summary: "did it", diff: { files: ["a.ts", "b.ts"], patch: "P" }, lane: "done" });
+    const html = renderDrawer({ cards: [c], focusedId: "a1" });
     expect(html).toContain("did it");
     expect(html).toContain("a.ts");
     expect(html).toContain('data-action="merge"');
     expect(html).toContain('data-action="discard"');
   });
   it("shows conflict files and Discard on conflict", () => {
-    const html = renderCardHTML(card({ state: "conflict", attention: true, conflictFiles: ["x.ts"] }));
+    const c = card({ id: "a1", state: "conflict", attention: true, conflictFiles: ["x.ts"], lane: "conflict" });
+    const html = renderDrawer({ cards: [c], focusedId: "a1" });
     expect(html).toContain("x.ts");
     expect(html).toContain('data-action="discard"');
     expect(html).not.toContain('data-action="merge"');
   });
   it("shows the error tail on error", () => {
-    const html = renderCardHTML(card({ state: "error", attention: true, error: "boom" }));
+    const c = card({ id: "a1", state: "error", attention: true, error: "boom", lane: "needsYou" });
+    const html = renderDrawer({ cards: [c], focusedId: "a1" });
     expect(html).toContain("boom");
   });
   it("escapes output so engine text cannot inject markup", () => {
-    const html = renderCardHTML(card({ output: "<img src=x onerror=alert(1)>" }));
+    const c = card({ id: "a1", output: "<img src=x onerror=alert(1)>" });
+    const html = renderDrawer({ cards: [c], focusedId: "a1" });
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("&lt;img");
   });

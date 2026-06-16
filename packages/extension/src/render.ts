@@ -1,6 +1,72 @@
-import { isTerminalState } from "@maestro/core";
-import type { CardVM } from "@maestro/cockpit";
+import type { CardVM, CockpitState, Lane } from "@maestro/cockpit";
 import { escapeHtml } from "./html.js";
+
+// ─── Lane layout constants ───────────────────────────────────────────────────
+
+const LANE_TITLES: Record<Lane, string> = {
+  working: "Working",
+  needsYou: "Needs you",
+  conflict: "Conflict",
+  done: "Done",
+};
+const LANE_ORDER: readonly Lane[] = ["working", "needsYou", "conflict", "done"];
+
+// ─── Card helpers ─────────────────────────────────────────────────────────────
+
+function goalLine(card: CardVM): string {
+  return card.goal ? `<div class="goal">${escapeHtml(card.goal)}</div>` : "";
+}
+
+function diffStat(card: CardVM): string {
+  if (!card.diffStat) return "";
+  return `<div class="diffstat"><span class="adds">+${card.diffStat.adds}</span> <span class="dels">-${card.diffStat.dels}</span></div>`;
+}
+
+function elapsed(card: CardVM): string {
+  return card.startedAt ? `<span class="elapsed" data-started="${card.startedAt}"></span>` : "";
+}
+
+function anatomy(card: CardVM): string {
+  const hasAny =
+    card.soul || card.toolsCount !== undefined || (card.skills?.length ?? 0) > 0;
+  if (!hasAny) return "";
+  const parts: string[] = [];
+  if (card.soul) parts.push(`<span class="an-soul">☽ soul</span>`);
+  if (card.toolsCount !== undefined)
+    parts.push(`<span class="an-tools">🔧 ${card.toolsCount}</span>`);
+  if (card.skills?.length)
+    parts.push(
+      `<span class="an-skills">◆ ${escapeHtml(card.skills[0]!)} ${card.skills.length}</span>`
+    );
+  return `<div class="anatomy">${parts.join(" · ")}</div>`;
+}
+
+/** Pure HTML for one agent card. Every engine-supplied string is escaped. */
+export function renderCardHTML(card: CardVM): string {
+  return `<section class="card lane-${card.lane}${card.attention ? " attention" : ""}" data-id="${escapeHtml(card.id)}" tabindex="0">
+  <header><span class="dot"></span><span class="role">${escapeHtml(card.roleName)}</span><span class="engine">${escapeHtml(card.engineId)}</span>${elapsed(card)}</header>
+  ${goalLine(card)}
+  <div class="task">${escapeHtml(card.taskDescription)}</div>
+  ${diffStat(card)}
+  ${anatomy(card)}
+</section>`;
+}
+
+// ─── Board ────────────────────────────────────────────────────────────────────
+
+function laneSection(lane: Lane, cards: CardVM[]): string {
+  const inLane = cards.filter((c) => c.lane === lane);
+  const body = inLane.length
+    ? inLane.map(renderCardHTML).join("")
+    : `<div class="lane-empty"></div>`;
+  return `<section class="lane lane-col-${lane}"><h2 class="lane-header">${LANE_TITLES[lane]} <span class="count">${inLane.length}</span></h2>${body}</section>`;
+}
+
+export function renderBoard(state: CockpitState): string {
+  return `<div class="board">${LANE_ORDER.map((lane) => laneSection(lane, state.cards)).join("")}</div>`;
+}
+
+// ─── Drawer helpers (carried over from old render.ts) ─────────────────────────
 
 function approvalPanel(card: CardVM): string {
   if (
@@ -69,8 +135,6 @@ function detail(card: CardVM): string {
     return `<div class="summary">${escapeHtml(card.summary ?? "")}</div><ul class="files">${files}</ul>`;
   }
   if (card.state === "done" && card.diffError) {
-    // The diff could not be computed. Surface the error so the user does not
-    // merge blind (the merge/discard controls still render in actions()).
     return `<div class="summary">${escapeHtml(card.summary ?? "")}</div><div class="diff-error">Could not compute diff: ${escapeHtml(card.diffError)}</div>`;
   }
   if (card.state === "conflict" && card.conflictFiles) {
@@ -84,30 +148,44 @@ function detail(card: CardVM): string {
     return `<pre class="error">${escapeHtml(card.error)}</pre>`;
   }
   if (card.state === "pr-created") {
-    // Terminal note: the PR was opened, the worktree was released, but the
-    // branch was kept so the pull request keeps its commits.
     return `<div class="pr-note">${escapeHtml("Pull request opened. Worktree released, branch kept.")}</div>`;
   }
   return "";
 }
 
-/** Pure HTML for one agent card. Every engine-supplied string is escaped. */
-export function renderCardHTML(card: CardVM): string {
-  const canApprove = card.engineCapabilities?.approvals ?? false;
-  // Only badge a LIVE agent as auto-approving. A terminal card (merged,
-  // discarded, detached, error, etc.) is not running, so "auto" would be
-  // misleading. Liveness is the core's single source of truth.
-  const autoBadge =
-    !canApprove && !isTerminalState(card.state)
-      ? `<span class="badge">auto</span>`
-      : "";
-  return `<section class="card state-${card.state}${card.attention ? " attention" : ""}" data-id="${escapeHtml(card.id)}">
-  <header><span class="role">${escapeHtml(card.roleName)}</span><span class="engine">${escapeHtml(card.engineId)}</span>${autoBadge}<span class="status">${card.state}</span></header>
-  <pre class="output">${escapeHtml(card.output)}</pre>
-  ${detail(card)}
-  ${approvalPanel(card)}
-  ${steerBox(card)}
-  ${sendBackBox(card)}
-  <footer>${actions(card)}</footer>
-</section>`;
+// ─── Drawer ───────────────────────────────────────────────────────────────────
+
+function instructionsTab(card: CardVM): string {
+  const goal = card.goal ? `<p class="why">${escapeHtml(card.goal)}</p>` : "";
+  return `<div class="tab-body" data-tab="instructions"><h3>Task</h3><p>${escapeHtml(card.taskDescription)}</p>${goal}</div>`;
+}
+
+function outputTab(card: CardVM): string {
+  return `<div class="tab-body" data-tab="output" hidden><pre class="output">${escapeHtml(card.output)}</pre></div>`;
+}
+
+function diffTab(card: CardVM): string {
+  const files = (card.diff?.files ?? []).map((f) => `<li>${escapeHtml(f)}</li>`).join("");
+  const patch = card.diff
+    ? `<pre class="patch">${escapeHtml(card.diff.patch)}</pre>`
+    : `<p class="ghost">No diff yet.</p>`;
+  return `<div class="tab-body" data-tab="diff" hidden><ul class="files">${files}</ul>${patch}</div>`;
+}
+
+export function renderDrawer(state: CockpitState): string {
+  if (!state.focusedId) return "";
+  const focused = state.cards.find((c) => c.id === state.focusedId);
+  if (!focused) return "";
+  const id = escapeHtml(focused.id);
+  const tabs = `<nav class="tabs"><button class="tab active" data-tab="instructions">Instructions</button><button class="tab" data-tab="output">Output</button><button class="tab" data-tab="diff">Diff</button></nav>`;
+  const bar = `${approvalPanel(focused)}${steerBox(focused)}${sendBackBox(focused)}<footer class="drawer-actions">${actions(focused)}</footer>`;
+  return `<aside class="drawer" data-id="${id}">
+  <header class="drawer-head"><span class="role">${escapeHtml(focused.roleName)}</span><span class="engine">${escapeHtml(focused.engineId)}</span><span class="state-pill lane-${focused.lane}">${escapeHtml(focused.state)}</span><button class="drawer-close" data-action="close-drawer" data-id="${id}">×</button></header>
+  ${tabs}
+  ${instructionsTab(focused)}
+  ${outputTab(focused)}
+  ${diffTab(focused)}
+  ${detail(focused)}
+  ${bar}
+</aside>`;
 }

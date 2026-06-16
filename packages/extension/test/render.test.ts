@@ -1,122 +1,116 @@
 import { describe, it, expect } from "vitest";
-import { renderCardHTML } from "../src/render.js";
-import type { CardVM } from "@maestro/cockpit";
+import { renderCardHTML, renderBoard, renderDrawer } from "../src/render.js";
+import type { CardVM, CockpitState } from "@maestro/cockpit";
 
-function baseCard(overrides: Partial<CardVM> = {}): CardVM {
+function card(over: Partial<CardVM> = {}): CardVM {
   return {
     id: "a1",
-    roleName: "Dev",
-    engineId: "acp",
+    roleName: "Implementer",
+    engineId: "copilot",
     state: "working",
-    output: "",
-    attention: false,
     lane: "working",
+    output: "",
     taskDescription: "do it",
-    ...overrides,
+    attention: false,
+    ...over,
   };
 }
 
-describe("render.ts M6: approval panel", () => {
-  it("renders approve/deny buttons when awaiting-approval and approvals capable", () => {
-    const html = renderCardHTML(baseCard({
-      state: "awaiting-approval",
-      pendingApprovalId: "req-1",
-      engineCapabilities: { approvals: true, steerable: false },
-      attention: true,
-    }));
-    expect(html).toContain('data-action="approve"');
-    expect(html).toContain('data-action="deny"');
-    expect(html).toContain('data-approval-id="req-1"');
+describe("renderCardHTML", () => {
+  it("shows role, engine chip, task line, and a lane accent class", () => {
+    const html = renderCardHTML(card({ engineId: "claude-sonnet-4.5", taskDescription: "ship the board" }));
+    expect(html).toContain("Implementer");
+    expect(html).toContain("claude-sonnet-4.5");
+    expect(html).toContain("ship the board");
+    expect(html).toContain("lane-working");
   });
-
-  it("renders approval detail (tool + description)", () => {
-    const html = renderCardHTML(baseCard({
-      state: "awaiting-approval",
-      pendingApprovalId: "req-1",
-      approvalDetail: { tool: "bash", description: "Run: npm test" },
-      engineCapabilities: { approvals: true, steerable: false },
-      attention: true,
-    }));
-    expect(html).toContain("bash");
-    expect(html).toContain("Run: npm test");
+  it("renders the faint italic goal when present and omits it when absent", () => {
+    expect(renderCardHTML(card({ goal: "so that checkout cannot break" }))).toContain("so that checkout cannot break");
+    expect(renderCardHTML(card())).not.toContain('class="goal"');
   });
-
-  it("escapes XSS in approval detail", () => {
-    const html = renderCardHTML(baseCard({
-      state: "awaiting-approval",
-      pendingApprovalId: "req-1",
-      approvalDetail: { tool: "<script>", description: "alert('xss')" },
-      engineCapabilities: { approvals: true, steerable: false },
-      attention: true,
-    }));
-    expect(html).not.toContain("<script>");
-    expect(html).toContain("&lt;script&gt;");
+  it("renders diffStat when a diff exists and omits it otherwise", () => {
+    expect(renderCardHTML(card({ state: "done", diffStat: { adds: 5, dels: 2 } }))).toContain("+5");
+    expect(renderCardHTML(card({ state: "done", diffStat: { adds: 5, dels: 2 } }))).toContain("-2");
+    expect(renderCardHTML(card())).not.toContain('class="diffstat"');
   });
-
-  it("does NOT render approve/deny when engineCapabilities.approvals is false", () => {
-    const html = renderCardHTML(baseCard({
-      state: "awaiting-approval",
-      pendingApprovalId: "req-1",
-      engineCapabilities: { approvals: false, steerable: false },
-      attention: true,
-    }));
-    expect(html).not.toContain('data-action="approve"');
-    expect(html).not.toContain('data-action="deny"');
+  it("emits an elapsed slot carrying startedAt for working cards", () => {
+    expect(renderCardHTML(card({ startedAt: 1718000000000 }))).toContain('data-started="1718000000000"');
+  });
+  it("omits the anatomy row in P1 (no soul/tools/skills)", () => {
+    expect(renderCardHTML(card())).not.toContain('class="anatomy"');
+  });
+  it("escapes engine output and goal so text cannot inject markup", () => {
+    const html = renderCardHTML(card({ goal: "<img src=x onerror=alert(1)>", output: "<script>bad" }));
+    expect(html).not.toContain("<img src=x");
+    expect(html).not.toContain("<script>bad");
+    expect(html).toContain("&lt;img");
   });
 });
 
-describe("render.ts M6: steering input", () => {
-  it("renders a steer form when steerable and working", () => {
-    const html = renderCardHTML(baseCard({
-      state: "working",
-      engineCapabilities: { approvals: false, steerable: true },
-    }));
-    expect(html).toContain('data-action="steer"');
-    expect(html).toContain("<input");
+describe("renderBoard", () => {
+  it("groups cards into Working / Needs you / Conflict / Done with live counts", () => {
+    const cards: CardVM[] = [
+      card({ id: "w1", lane: "working" }),
+      card({ id: "n1", lane: "needsYou", state: "awaiting-approval", attention: true }),
+      card({ id: "n2", lane: "needsYou", state: "error", attention: true }),
+      card({ id: "c1", lane: "conflict", state: "conflict", attention: true }),
+      card({ id: "d1", lane: "done", state: "merged" }),
+    ];
+    const html = renderBoard({ cards });
+    expect(html).toContain("Working");
+    expect(html).toContain("Needs you");
+    expect(html).toContain("Conflict");
+    expect(html).toContain("Done");
+    expect(html).toMatch(/Needs you[\s\S]*?2/);
+    expect(html).toContain('data-id="w1"');
+    expect(html).toContain('data-id="c1"');
   });
-
-  it("does NOT render a steer form when steerable is false", () => {
-    const html = renderCardHTML(baseCard({
-      state: "working",
-      engineCapabilities: { approvals: false, steerable: false },
-    }));
-    expect(html).not.toContain('data-action="steer"');
-  });
-
-  it("renders a steer form when awaiting-approval and steerable", () => {
-    const html = renderCardHTML(baseCard({
-      state: "awaiting-approval",
-      pendingApprovalId: "req-1",
-      engineCapabilities: { approvals: true, steerable: true },
-      attention: true,
-    }));
-    expect(html).toContain('data-action="steer"');
+  it("renders empty lanes as a quiet placeholder, never a hard border", () => {
+    const html = renderBoard({ cards: [card({ lane: "working" })] });
+    expect(html).toContain('class="lane-empty"');
   });
 });
 
-describe("render.ts M6: send-back box", () => {
-  it("renders a send-back form on a done card", () => {
-    const html = renderCardHTML(baseCard({ state: "done", summary: "All done", attention: true }));
-    expect(html).toContain('data-action="sendBack"');
-    expect(html).toContain("<textarea");
-  });
+const steerable = { approvals: false, steerable: true };
+const approver = { approvals: true, steerable: true };
 
-  it("renders a send-back form on a conflict card", () => {
-    const html = renderCardHTML(baseCard({ state: "conflict", conflictFiles: ["src/foo.ts"], attention: true }));
-    expect(html).toContain('data-action="sendBack"');
-    expect(html).toContain("<textarea");
+describe("renderDrawer", () => {
+  it("is empty when nothing is focused (board stays full-width)", () => {
+    expect(renderDrawer({ cards: [card()] })).toBe("");
   });
-
-  it("does NOT render a send-back form on a working card", () => {
-    const html = renderCardHTML(baseCard({ state: "working" }));
-    expect(html).not.toContain('data-action="sendBack"');
+  it("renders Instructions / Output / Diff tabs for the focused card", () => {
+    const html = renderDrawer({ cards: [card({ id: "a1" })], focusedId: "a1" });
+    expect(html).toContain("Instructions"); expect(html).toContain("Output"); expect(html).toContain("Diff");
   });
-});
-
-describe("render.ts M7: detached card", () => {
-  it("renders merge + discard actions on a detached card", () => {
-    const html = renderCardHTML(baseCard({ state: "detached", attention: true }));
-    expect(html).toContain('data-action="merge"');
-    expect(html).toContain('data-action="discard"');
+  it("Instructions tab is read-only: shows task + goal, no textarea, no Save", () => {
+    const html = renderDrawer({ cards: [card({ id: "a1", taskDescription: "wire it", goal: "so that it is real" })], focusedId: "a1" });
+    expect(html).toContain("wire it"); expect(html).toContain("so that it is real");
+    expect(html).not.toContain("<textarea"); expect(html).not.toContain('data-action="save-instructions"');
+  });
+  it("shows Approve/Deny only when approvals-capable and awaiting-approval", () => {
+    const yes = renderDrawer({ cards: [card({ id: "a1", state: "awaiting-approval", attention: true, pendingApprovalId: "ap1", engineCapabilities: approver })], focusedId: "a1" });
+    expect(yes).toContain('data-action="approve"'); expect(yes).toContain('data-action="deny"');
+    const no = renderDrawer({ cards: [card({ id: "a1", state: "awaiting-approval", attention: true, pendingApprovalId: "ap1", engineCapabilities: { approvals: false, steerable: false } })], focusedId: "a1" });
+    expect(no).not.toContain('data-action="approve"');
+  });
+  it("shows the Steer box only when steerable", () => {
+    expect(renderDrawer({ cards: [card({ id: "a1", state: "working", engineCapabilities: steerable })], focusedId: "a1" })).toContain('data-action="steer"');
+    expect(renderDrawer({ cards: [card({ id: "a1", state: "working", engineCapabilities: { approvals: false, steerable: false } })], focusedId: "a1" })).not.toContain('data-action="steer"');
+  });
+  it("shows Send-back on done/conflict and merge/discard on done", () => {
+    const html = renderDrawer({ cards: [card({ id: "a1", state: "done", attention: true, diff: { files: ["x.ts"], patch: "P" }, summary: "ok" })], focusedId: "a1" });
+    expect(html).toContain('data-action="sendBack"'); expect(html).toContain('data-action="merge"'); expect(html).toContain('data-action="discard"');
+  });
+  it("shows conflict files + resolve-conflict on conflict, never merge", () => {
+    const html = renderDrawer({ cards: [card({ id: "a1", state: "conflict", attention: true, conflictFiles: ["x.ts"] })], focusedId: "a1" });
+    expect(html).toContain("x.ts"); expect(html).toContain('data-action="resolve-conflict"'); expect(html).not.toContain('data-action="merge"');
+  });
+  it("Diff tab shows files + escaped patch", () => {
+    const html = renderDrawer({ cards: [card({ id: "a1", state: "done", diff: { files: ["a.ts"], patch: "<x>+1" } })], focusedId: "a1" });
+    expect(html).toContain("a.ts"); expect(html).toContain("&lt;x&gt;");
+  });
+  it("escapes the streamed output in the Output tab", () => {
+    const html = renderDrawer({ cards: [card({ id: "a1", output: "<img src=x onerror=alert(1)>" })], focusedId: "a1" });
+    expect(html).not.toContain("<img src=x"); expect(html).toContain("&lt;img");
   });
 });
