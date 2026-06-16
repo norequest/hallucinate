@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { isWebviewMessage, type CockpitState, type WebviewToHost } from "@maestro/cockpit";
+import { isWebviewMessage, type CockpitState, type ComposerOptions, type WebviewToHost } from "@maestro/cockpit";
 import { getStageHtml, makeNonce } from "./html.js";
 
 /** Singleton Stage webview panel. */
@@ -43,6 +43,10 @@ export class StageWebviewPanel {
   post(state: CockpitState): void {
     this.lastState = state;
     void this.panel?.webview.postMessage({ type: "state", state });
+  }
+
+  postComposer(options: ComposerOptions): void {
+    void this.panel?.webview.postMessage({ type: "composer-options", options });
   }
 
   get isOpen(): boolean {

@@ -1,4 +1,5 @@
 import type { AgentState } from "@maestro/core";
+import type { ComposerOptions } from "./composer.js";
 
 /** Which column on the Conducting Board this card belongs to. */
 export type Lane = "working" | "needsYou" | "conflict" | "done";
@@ -52,7 +53,9 @@ export interface CockpitState {
 }
 
 /** Messages the extension host sends INTO the webview. */
-export type HostToWebview = { type: "state"; state: CockpitState };
+export type HostToWebview =
+  | { type: "state"; state: CockpitState }
+  | { type: "composer-options"; options: ComposerOptions };
 
 /** Messages the webview sends OUT to the extension host. */
 export type WebviewToHost =

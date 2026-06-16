@@ -10,6 +10,7 @@ import { StageWebviewPanel } from "./stage.js";
 import { EventLogger } from "./persistence.js";
 import { FsPersistenceBackend } from "./persistence-fs.js";
 import { loadConductorDir, makeNodeFsReader, scaffoldIfMissing, makeNodeFsWriter, DEFAULT_CONFIG } from "@maestro/config";
+import { isKnownEngineId, loadComposerData } from "./composer-data.js";
 
 const DEFAULT_ROLE: Role = {
   name: "Implementer",
@@ -151,7 +152,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     };
 
-    const stage = new StageWebviewPanel(context.extensionUri, (msg) => cockpit.handle(msg));
+    const stage = new StageWebviewPanel(context.extensionUri, (msg) => {
+      // Engine-allowlist boundary guard (R6): refuse a dispatch carrying an engine
+      // not in KNOWN_ENGINE_IDS before it reaches the orchestrator. This prevents a
+      // tampered webview from injecting an arbitrary binary as an engine.
+      if (msg.type === "dispatch" && msg.engineId !== undefined && !isKnownEngineId(msg.engineId)) {
+        void vscode.window.showWarningMessage(`Maestro: refused dispatch to unknown engine "${msg.engineId}".`);
+        return;
+      }
+      cockpit.handle(msg);
+    });
 
     const cockpit = createCockpit(
       orch,
@@ -221,6 +231,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       conducting.stage.reveal();
       if (agentId) conducting.cockpit.handle({ type: "focus", agentId });
+    }),
+    vscode.commands.registerCommand("maestro.newAgent", async () => {
+      if (!conducting) {
+        void vscode.window.showWarningMessage(NO_FOLDER_MESSAGE);
+        return;
+      }
+      const { repoRoot, stage } = conducting;
+      const fsReader = await makeNodeFsReader();
+      const data = await loadComposerData(repoRoot, fsReader).catch(() => ({
+        roles: [],
+        teams: [],
+        errors: [] as Array<{ source: string; errors: string[] }>,
+      }));
+      if (data.errors.length > 0) {
+        const msgs = data.errors.map((e) => `${e.source}: ${e.errors.join("; ")}`).join("\n");
+        void vscode.window.showWarningMessage(`Maestro: config errors in .conductor/:\n${msgs}`);
+      }
+      const { composerOptions } = await import("@maestro/cockpit");
+      stage.reveal();
+      stage.postComposer(composerOptions(data.roles, data.teams));
     }),
     vscode.commands.registerCommand("maestro.spawnAgent", async () => {
       if (!conducting) {
