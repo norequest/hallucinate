@@ -3,7 +3,7 @@ import { renderCardHTML } from "../src/render.js";
 import type { CardVM } from "@maestro/cockpit";
 
 function card(overrides: Partial<CardVM>): CardVM {
-  return { id: "a1", roleName: "Implementer", engineId: "copilot", state: "done", output: "", attention: false, ...overrides };
+  return { id: "a1", roleName: "Implementer", engineId: "copilot", state: "done", output: "", attention: false, lane: "done", taskDescription: "do it", ...overrides };
 }
 
 describe("renderCardHTML (M9 additions)", () => {

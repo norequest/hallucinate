@@ -4,7 +4,7 @@ import type { CardVM } from "@maestro/cockpit";
 import { cardIcon, cardToRosterItem } from "../src/roster-map.js";
 
 function card(over: Partial<CardVM> = {}): CardVM {
-  return { id: "a1", roleName: "Implementer", engineId: "copilot", state: "working", output: "", attention: false, ...over };
+  return { id: "a1", roleName: "Implementer", engineId: "copilot", state: "working", output: "", attention: false, lane: "working", taskDescription: "do it", ...over };
 }
 
 describe("roster mapping", () => {

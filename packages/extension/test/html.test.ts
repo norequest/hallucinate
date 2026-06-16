@@ -4,7 +4,7 @@ import { getStageHtml, escapeHtml, makeNonce } from "../src/html.js";
 import { renderCardHTML } from "../src/render.js";
 
 function card(over: Partial<CardVM> = {}): CardVM {
-  return { id: "a1", roleName: "Implementer", engineId: "copilot", state: "working", output: "", attention: false, ...over };
+  return { id: "a1", roleName: "Implementer", engineId: "copilot", state: "working", output: "", attention: false, lane: "working", taskDescription: "do it", ...over };
 }
 
 describe("getStageHtml", () => {

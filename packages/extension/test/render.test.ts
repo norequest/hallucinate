@@ -10,6 +10,8 @@ function baseCard(overrides: Partial<CardVM> = {}): CardVM {
     state: "working",
     output: "",
     attention: false,
+    lane: "working",
+    taskDescription: "do it",
     ...overrides,
   };
 }
