@@ -75,12 +75,16 @@ export interface Role {
   instructions: string;
   engine: { id: string; model?: string };
   autonomy: "manual" | "auto-approve-safe" | "yolo";
+  /** Names of skills resolved to .conductor/skills/<name>/SKILL.md at spawn. Additive; absent means none. */
+  skills?: string[];
 }
 
 /** A named group of roles that can be dispatched together. */
 export interface Team {
   name: string;
   roles: Role[];
+  /** Names of skills inherited by all roles in this team at spawn. Additive; absent means none. */
+  skills?: string[];
 }
 
 /** A running instance of a role on a task. */

@@ -24,6 +24,30 @@ describeTeam("Team type", () => {
   });
 });
 
+import { describe as describeSkills, it as itSkills, expectTypeOf as expectTypeOfSkills } from "vitest";
+import type { Role as RoleSkills, Team as TeamSkills } from "../src/types.js";
+
+describeSkills("Role.skills (P3)", () => {
+  itSkills("Role can carry a skills array", () => {
+    const role: RoleSkills = {
+      name: "Tester",
+      instructions: "Run tests.",
+      engine: { id: "copilot" },
+      autonomy: "manual",
+      skills: ["run-tests"],
+    };
+    expectTypeOfSkills(role.skills).toEqualTypeOf<string[] | undefined>();
+  });
+
+  itSkills("Role type accepts optional skills field", () => {
+    expectTypeOfSkills<RoleSkills>().toMatchTypeOf<{ skills?: string[] }>();
+  });
+
+  itSkills("Team type accepts optional skills field", () => {
+    expectTypeOfSkills<TeamSkills>().toMatchTypeOf<{ skills?: string[] }>();
+  });
+});
+
 import { describe as describeStates, it as itStates, expect as expectStates } from "vitest";
 import type { AgentState as AgentStateT, PersistedAgentRecord, Agent as AgentT } from "../src/types.js";
 
