@@ -69,6 +69,28 @@ export interface ApprovalDetail {
   description: string;
 }
 
+/** The five built-in capability names the anatomy Tools grid renders. */
+export type BuiltinTool = "Read" | "Edit" | "Run" | "Search" | "Git";
+
+/** A granular tool grant. Read and write are tracked APART; write is off by
+ *  default because absence of a write entry means read-only. */
+export interface ToolGrant {
+  builtins?: { read?: ("Read" | "Search")[]; write?: ("Edit" | "Run" | "Git")[] };
+  mcp?: Array<{ server: string; read?: boolean; write?: boolean }>;
+}
+
+/** A parsed soul.md: stable identity across tasks. Sections per design 03. */
+export interface SoulDoc {
+  identity?: string;
+  principles?: string;
+  voice?: string;
+  priorities?: string;
+  /** Actions the agent will never take, regardless of instructions (Tier 1). */
+  redLines?: string;
+  /** The full raw markdown, kept so a round-trip never loses content. */
+  raw: string;
+}
+
 /** A reusable worker template. */
 export interface Role {
   name: string;
@@ -77,6 +99,10 @@ export interface Role {
   autonomy: "manual" | "auto-approve-safe" | "yolo";
   /** Names of skills resolved to .conductor/skills/<name>/SKILL.md at spawn. Additive; absent means none. */
   skills?: string[];
+  /** Name of a soul file resolved to .conductor/souls/<soul>.md at spawn. */
+  soul?: string;
+  /** Tool grants for this role; absence of a write entry means read-only. */
+  tools?: ToolGrant;
 }
 
 /** A named group of roles that can be dispatched together. */
