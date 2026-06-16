@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { scaffoldIfMissing, STARTER_ROLE } from "../src/scaffolder.js";
 import type { FsWriter } from "../src/scaffolder.js";
 import { parseRoleYaml } from "../src/parser.js";
+import { parseSkillMarkdown } from "../src/skill-parser.js";
 
 function makeFakeWriter(): { writer: FsWriter; written: Map<string, string>; dirs: Set<string> } {
   const written = new Map<string, string>();
@@ -71,5 +72,27 @@ describe("scaffoldIfMissing", () => {
 
     expect([...dirs].some((d) => d.includes("roles"))).toBe(true);
     expect([...dirs].some((d) => d.includes("teams"))).toBe(true);
+  });
+
+  it("creates a .conductor/skills/run-tests/SKILL.md file", async () => {
+    const { writer, written } = makeFakeWriter();
+    await scaffoldIfMissing(ROOT, writer);
+
+    const skillEntry = [...written.keys()].find((k) => k.includes("skills/run-tests/SKILL.md"));
+    expect(skillEntry).toBeDefined();
+  });
+
+  it("the seeded run-tests SKILL.md parses back to an ok manifest", async () => {
+    const { writer, written } = makeFakeWriter();
+    await scaffoldIfMissing(ROOT, writer);
+
+    const skillEntry = [...written.entries()].find(([k]) => k.includes("skills/run-tests/SKILL.md"));
+    expect(skillEntry).toBeDefined();
+    const [, md] = skillEntry!;
+    const parsed = parseSkillMarkdown(md, ".conductor/skills/run-tests/SKILL.md");
+    expect(parsed.manifest.ok).toBe(true);
+    if (parsed.manifest.ok) {
+      expect(parsed.manifest.value.name).toBe("run-tests");
+    }
   });
 });
