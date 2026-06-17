@@ -222,6 +222,30 @@ export function validateRole(raw: unknown): ValidationResult<Role> {
     }
   }
 
+  // Validate optional provenance block (tolerant: absent or malformed -> simply ignored).
+  // A well-formed provenance has source (string) and adoptedAt (string); sha is optional.
+  // Malformed provenance is NOT a hard error -- it is silently dropped.
+  let validatedProvenance: Role["provenance"] | undefined;
+  if (raw["provenance"] !== undefined) {
+    const prov = raw["provenance"];
+    if (
+      isRecord(prov) &&
+      isString(prov["source"]) &&
+      prov["source"].trim() !== "" &&
+      isString(prov["adoptedAt"]) &&
+      prov["adoptedAt"].trim() !== ""
+    ) {
+      validatedProvenance = {
+        source: prov["source"].trim(),
+        adoptedAt: prov["adoptedAt"].trim(),
+        ...(isString(prov["sha"]) && prov["sha"].trim() !== ""
+          ? { sha: prov["sha"].trim() }
+          : {}),
+      };
+    }
+    // Otherwise: malformed provenance is silently dropped (not a hard error).
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors, warnings };
   }
@@ -240,6 +264,7 @@ export function validateRole(raw: unknown): ValidationResult<Role> {
     ...(raw["skills"] !== undefined ? { skills: raw["skills"] as string[] } : {}),
     ...(validatedTools !== undefined ? { tools: validatedTools } : {}),
     ...(raw["soul"] !== undefined ? { soul: (raw["soul"] as string).trim() } : {}),
+    ...(validatedProvenance !== undefined ? { provenance: validatedProvenance } : {}),
   };
 
   return { ok: true, value: role, warnings };

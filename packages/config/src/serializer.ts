@@ -34,6 +34,15 @@ export function serializeRole(role: Role): string {
     ...(role.skills !== undefined ? { skills: role.skills } : {}),
     ...(toolsDoc !== undefined ? { tools: toolsDoc } : {}),
     ...(role.soul !== undefined ? { soul: role.soul } : {}),
+    ...(role.provenance !== undefined
+      ? {
+          provenance: {
+            source: role.provenance.source,
+            ...(role.provenance.sha !== undefined ? { sha: role.provenance.sha } : {}),
+            adoptedAt: role.provenance.adoptedAt,
+          },
+        }
+      : {}),
   };
   return stringifyYaml(doc, { lineWidth: 120 });
 }

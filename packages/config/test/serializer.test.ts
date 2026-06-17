@@ -97,6 +97,43 @@ describe("serializeRole tools and soul round-trip", () => {
   });
 });
 
+describe("serializeRole provenance round-trip (P5)", () => {
+  it("round-trips provenance with sha through parseRoleYaml", () => {
+    const withProv: Role = {
+      ...implementer,
+      provenance: { source: ".claude/agents/x.md", sha: "abc123", adoptedAt: "2026-06-17" },
+    };
+    const yaml = serializeRole(withProv);
+    expect(yaml).toContain("provenance:");
+    const parsed = parseRoleYaml(yaml, "test");
+    expect(parsed.role.ok).toBe(true);
+    if (parsed.role.ok) {
+      expect(parsed.role.value.provenance?.source).toBe(".claude/agents/x.md");
+      expect(parsed.role.value.provenance?.sha).toBe("abc123");
+      expect(parsed.role.value.provenance?.adoptedAt).toBe("2026-06-17");
+    }
+  });
+
+  it("round-trips provenance without sha through parseRoleYaml", () => {
+    const withProv: Role = {
+      ...implementer,
+      provenance: { source: ".claude/agents/y.md", adoptedAt: "2026-06-17" },
+    };
+    const yaml = serializeRole(withProv);
+    const parsed = parseRoleYaml(yaml, "test");
+    expect(parsed.role.ok).toBe(true);
+    if (parsed.role.ok) {
+      expect(parsed.role.value.provenance?.sha).toBeUndefined();
+      expect(parsed.role.value.provenance?.source).toBe(".claude/agents/y.md");
+    }
+  });
+
+  it("a bare role has no provenance: key in serialized YAML", () => {
+    const yaml = serializeRole(implementer);
+    expect(yaml).not.toContain("provenance:");
+  });
+});
+
 describe("serializeSkill", () => {
   it("round-trips name, description, allowedTools, and body through parseSkillMarkdown", () => {
     const manifest = {

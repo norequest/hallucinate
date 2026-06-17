@@ -107,6 +107,12 @@ export interface Role {
   soul?: string;
   /** Tool grants for this role; absence of a write entry means read-only. */
   tools?: ToolGrant;
+  /**
+   * Adopt audit trail: set by the discover/adopt flow to record where this role
+   * was originally found. Absent on hand-authored roles; never required for a
+   * role to be valid.
+   */
+  provenance?: { source: string; sha?: string; adoptedAt: string };
 }
 
 /** A named group of roles that can be dispatched together. */
