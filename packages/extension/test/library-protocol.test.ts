@@ -147,4 +147,46 @@ describe("isLibraryMessage", () => {
   it("rejects object with no type field", () => {
     expect(isLibraryMessage({ roleName: "Tester" })).toBe(false);
   });
+
+  // ─── discover/adopt variants ───────────────────────────────────────────────
+
+  it("accepts scan-repo", () => {
+    expect(isLibraryMessage({ type: "scan-repo" })).toBe(true);
+  });
+
+  it("accepts scan-plugins", () => {
+    expect(isLibraryMessage({ type: "scan-plugins" })).toBe(true);
+  });
+
+  it("accepts adopt-agent with a valid itemId", () => {
+    expect(isLibraryMessage({ type: "adopt-agent", itemId: "some/path.md" })).toBe(true);
+  });
+
+  it("accepts adopt-skill with a valid itemId", () => {
+    expect(isLibraryMessage({ type: "adopt-skill", itemId: "some/path.md" })).toBe(true);
+  });
+
+  it("accepts browse-source with a valid itemId", () => {
+    expect(isLibraryMessage({ type: "browse-source", itemId: "some/path.md" })).toBe(true);
+  });
+
+  it("rejects adopt-agent with missing itemId", () => {
+    expect(isLibraryMessage({ type: "adopt-agent" })).toBe(false);
+  });
+
+  it("rejects adopt-agent with non-string itemId", () => {
+    expect(isLibraryMessage({ type: "adopt-agent", itemId: 123 })).toBe(false);
+  });
+
+  it("rejects adopt-skill with missing itemId", () => {
+    expect(isLibraryMessage({ type: "adopt-skill" })).toBe(false);
+  });
+
+  it("accepts browse-source with an empty-string itemId (type check only)", () => {
+    expect(isLibraryMessage({ type: "browse-source", itemId: "" })).toBe(true);
+  });
+
+  it("rejects unknown types even after new variants exist", () => {
+    expect(isLibraryMessage({ type: "not-a-real-type" })).toBe(false);
+  });
 });

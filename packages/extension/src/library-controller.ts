@@ -199,6 +199,14 @@ export function createLibrary(
         return;
       }
 
+      // Discover/adopt messages are handled by DiscoverController (P5), not here.
+      case "scan-repo":
+      case "scan-plugins":
+      case "adopt-agent":
+      case "adopt-skill":
+      case "browse-source":
+        return;
+
       default: {
         // Exhaustiveness guard: a new LibraryToHost variant is a loud compile error here.
         const _exhaustive: never = msg;

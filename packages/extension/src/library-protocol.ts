@@ -1,3 +1,5 @@
+import type { DiscoveredItem, McpInventory } from "@maestro/config";
+
 /** Which tab is active in the Library panel. */
 export type LibraryTab = "agents" | "teams" | "skills" | "discover";
 
@@ -28,7 +30,9 @@ export interface LibrarySnapshot {
 }
 
 /** Messages the extension host sends INTO the Library webview. */
-export type HostToLibrary = { type: "library-state"; snapshot: LibrarySnapshot };
+export type HostToLibrary =
+  | { type: "library-state"; snapshot: LibrarySnapshot }
+  | { type: "discover-results"; items: DiscoveredItem[]; mcp: McpInventory; scanError?: string };
 
 /** Messages the Library webview sends OUT to the extension host. */
 export type LibraryToHost =
@@ -38,7 +42,12 @@ export type LibraryToHost =
   | { type: "skill-save"; name: string; description: string; body: string; allowedTools?: string[] }
   | { type: "skill-delete"; name: string }
   | { type: "attach-skill"; roleName: string; skillName: string }
-  | { type: "detach-skill"; roleName: string; skillName: string };
+  | { type: "detach-skill"; roleName: string; skillName: string }
+  | { type: "scan-repo" }
+  | { type: "scan-plugins" }
+  | { type: "adopt-agent"; itemId: string }
+  | { type: "adopt-skill"; itemId: string }
+  | { type: "browse-source"; itemId: string };
 
 // ─── Runtime guard ────────────────────────────────────────────────────────────
 
@@ -84,6 +93,13 @@ export function isLibraryMessage(msg: unknown): msg is LibraryToHost {
     case "attach-skill":
     case "detach-skill":
       return isString(m["roleName"]) && isString(m["skillName"]);
+    case "scan-repo":
+    case "scan-plugins":
+      return true;
+    case "adopt-agent":
+    case "adopt-skill":
+    case "browse-source":
+      return isString(m["itemId"]);
     default:
       return false;
   }
