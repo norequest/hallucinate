@@ -37,21 +37,34 @@ const libraryWebview = {
   sourcemap: true,
 };
 
+/** Anatomy editor webview client: browser IIFE, no externals. */
+const anatomyWebview = {
+  entryPoints: ["src/webview/anatomy-main.ts"],
+  outfile: "dist/webview/anatomy-main.js",
+  bundle: true,
+  platform: "browser",
+  format: "iife",
+  target: "es2020",
+  sourcemap: true,
+};
+
 function copyStyles() {
   mkdirSync("dist/webview", { recursive: true });
   copyFileSync("src/webview/style.css", "dist/webview/style.css");
   copyFileSync("src/webview/library.css", "dist/webview/library.css");
+  copyFileSync("src/webview/anatomy.css", "dist/webview/anatomy.css");
 }
 
 if (watch) {
   const a = await context(host);
   const b = await context(webview);
   const c = await context(libraryWebview);
-  await Promise.all([a.watch(), b.watch(), c.watch()]);
+  const d = await context(anatomyWebview);
+  await Promise.all([a.watch(), b.watch(), c.watch(), d.watch()]);
   copyStyles();
   console.log("esbuild watching...");
 } else {
-  await Promise.all([build(host), build(webview), build(libraryWebview)]);
+  await Promise.all([build(host), build(webview), build(libraryWebview), build(anatomyWebview)]);
   copyStyles();
   console.log("esbuild done");
 }

@@ -8,12 +8,15 @@ import * as nodePath from "node:path";
 import {
   loadSkills,
   loadConductorDir,
+  loadSoul,
   serializeSkill,
   serializeRole,
   makeNodeFsReader,
   makeNodeFsWriter,
+  KNOWN_ENGINE_IDS,
 } from "@maestro/config";
 import type { ConfigGateway } from "./library-controller.js";
+import type { AnatomyGateway } from "./anatomy-controller.js";
 
 /**
  * Refuse any name that is not a single, clean path segment before it is joined
@@ -110,6 +113,70 @@ export function makeConfigGateway(repoRoot: string): ConfigGateway {
 
       const fsWriter = await makeNodeFsWriter();
       await fsWriter.writeFile(rolePath, serialized);
+    },
+  };
+}
+
+export function makeAnatomyGateway(repoRoot: string): AnatomyGateway {
+  return {
+    async loadRole(roleName: string) {
+      const fsReader = await makeNodeFsReader();
+      const result = await loadConductorDir(repoRoot, fsReader);
+      return result.roles.find((r) => r.name === roleName) ?? null;
+    },
+
+    async loadSoulBody(roleName: string) {
+      try {
+        const fsReader = await makeNodeFsReader();
+        const result = await loadConductorDir(repoRoot, fsReader);
+        const role = result.roles.find((r) => r.name === roleName);
+        if (!role || !role.soul) return "";
+        const soulResult = await loadSoul(repoRoot, role.soul, fsReader);
+        if ("error" in soulResult) return "";
+        return soulResult.soul.raw;
+      } catch {
+        return "";
+      }
+    },
+
+    async loadSkillRequirements() {
+      const fsReader = await makeNodeFsReader();
+      const result = await loadSkills(repoRoot, fsReader);
+      return result.skills.map((s) => ({ name: s.name, allowedTools: s.allowedTools }));
+    },
+
+    async writeRole(role) {
+      const baseName = role.name.toLowerCase().replace(/\s+/g, "-");
+      assertSafeSegment(baseName, "role");
+      const fsWriter = await makeNodeFsWriter();
+      const rolePath = nodePath.join(repoRoot, ".conductor", "roles", `${baseName}.yaml`);
+      await fsWriter.writeFile(rolePath, serializeRole(role));
+    },
+
+    async writeSoul(roleName, body) {
+      const fsReader = await makeNodeFsReader();
+      const result = await loadConductorDir(repoRoot, fsReader);
+      const role = result.roles.find((r) => r.name === roleName);
+      if (!role) throw new Error(`Role "${roleName}" not found`);
+
+      const soulName = role.soul ?? roleName.toLowerCase().replace(/\s+/g, "-");
+      assertSafeSegment(soulName, "soul");
+
+      const fsWriter = await makeNodeFsWriter();
+      const soulPath = nodePath.join(repoRoot, ".conductor", "souls", `${soulName}.md`);
+      await fsWriter.writeFile(soulPath, body);
+
+      if (!role.soul) {
+        const updatedRole = { ...role, soul: soulName };
+        const baseName = roleName.toLowerCase().replace(/\s+/g, "-");
+        assertSafeSegment(baseName, "role");
+        const rolePath = nodePath.join(repoRoot, ".conductor", "roles", `${baseName}.yaml`);
+        await fsWriter.writeFile(rolePath, serializeRole(updatedRole));
+      }
+    },
+
+    isKnownEngineId(id: string) {
+      return KNOWN_ENGINE_IDS.has(id);
     },
   };
 }
