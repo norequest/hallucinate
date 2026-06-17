@@ -179,7 +179,16 @@ function diffTab(card: CardVM): string {
   const patch = card.diff
     ? `<pre class="patch">${escapeHtml(card.diff.patch)}</pre>`
     : `<p class="ghost">No diff yet.</p>`;
-  return `<div class="tab-body" data-tab="diff" hidden><ul class="files">${files}</ul>${patch}</div>`;
+
+  // Show "Open full review" for cards that have a diff or are in a conflict /
+  // cleanup-failed state (where the review panel provides actionable controls).
+  const hasDiffOrConflict =
+    !!card.diff || card.state === "conflict" || card.state === "merge-cleanup-failed";
+  const openReviewBtn = hasDiffOrConflict
+    ? `<button class="open-review-btn" data-action="open-review" data-id="${escapeHtml(card.id)}">Open full review</button>`
+    : "";
+
+  return `<div class="tab-body" data-tab="diff" hidden>${openReviewBtn}<ul class="files">${files}</ul>${patch}</div>`;
 }
 
 export function renderDrawer(state: CockpitState): string {

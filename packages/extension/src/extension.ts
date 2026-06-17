@@ -15,6 +15,7 @@ import { isKnownEngineId, loadComposerData } from "./composer-data.js";
 import { makeConfigGateway, makeAnatomyGateway } from "./config-gateway.js";
 import { LibraryWebviewPanel } from "./library.js";
 import { AnatomyWebviewPanel } from "./anatomy.js";
+import { ReviewWebviewPanel } from "./review.js";
 
 /**
  * Get the HEAD SHA of the repo at the given root. Returns undefined when git
@@ -53,6 +54,7 @@ interface Conducting {
   readonly workspaces: GitWorkspaceManager;
   readonly cockpit: ReturnType<typeof createCockpit>;
   readonly stage: StageWebviewPanel;
+  readonly review: ReviewWebviewPanel;
   readonly library: LibraryWebviewPanel;
   readonly anatomy: AnatomyWebviewPanel;
 }
@@ -193,25 +195,62 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     };
 
-    const stage = new StageWebviewPanel(context.extensionUri, (msg) => {
-      // Engine-allowlist boundary guard (R6): refuse a dispatch carrying an engine
-      // not in KNOWN_ENGINE_IDS before it reaches the orchestrator. This prevents a
-      // tampered webview from injecting an arbitrary binary as an engine.
+    // Shared message handler for both Stage and Review: runs the engine-allowlist
+    // guard on dispatch then forwards to the cockpit. Defined before the panels so
+    // both can close over it.
+    const handleWebviewMessage = (msg: import("@maestro/cockpit").WebviewToHost): void => {
       if (msg.type === "dispatch" && msg.engineId !== undefined && !isKnownEngineId(msg.engineId)) {
         void vscode.window.showWarningMessage(`Maestro: refused dispatch to unknown engine "${msg.engineId}".`);
         return;
       }
       cockpit.handle(msg);
-    });
+    };
+
+    // ReviewWebviewPanel: full-width diff/decision view opened from a board card.
+    // Declared before cockpit so the onOpenReview callback can reference it by
+    // closure (cockpit is declared immediately below; review is created first and
+    // passed into createCockpit via the callback).
+    const review = new ReviewWebviewPanel(context.extensionUri, handleWebviewMessage);
+
+    const stage = new StageWebviewPanel(context.extensionUri, handleWebviewMessage);
 
     const cockpit = createCockpit(
       orch,
       (state) => {
         roster.update(state);
         stage.post(state);
+        // If the review panel is open, refresh its card when state changes so the
+        // decision bar stays in sync (e.g., done -> merged after the user clicks
+        // Merge on the board while review is visible).
+        if (review.isOpen) {
+          const focusedId = state.focusedId;
+          if (focusedId) {
+            const card = state.cards.find((c) => c.id === focusedId);
+            if (card) {
+              review.refresh(card, {
+                prMode: prModeEnabled(),
+                prDraft: vscode.workspace.getConfiguration("maestro").get<boolean>("prDraft", false),
+              });
+            }
+          }
+        }
       },
       (message) => void vscode.window.showErrorMessage(`Maestro: ${message}`),
       handleMergeAction,
+      (agentId) => {
+        // onOpenReview: look up the card from the cockpit's current state and open
+        // the review panel. Best-effort: warn if the card is not found.
+        const state = cockpit.state();
+        const card = state.cards.find((c) => c.id === agentId);
+        if (!card) {
+          void vscode.window.showWarningMessage(`Maestro: agent ${agentId} not found for review.`);
+          return;
+        }
+        review.open(card, {
+          prMode: prModeEnabled(),
+          prDraft: vscode.workspace.getConfiguration("maestro").get<boolean>("prDraft", false),
+        });
+      },
     );
 
     // Persistence (M7): restore the previous session, then log all future events.
@@ -318,7 +357,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const anatomyGateway = makeAnatomyGateway(repoRoot);
     const anatomy = new AnatomyWebviewPanel(context.extensionUri, anatomyGateway);
     anatomyRef = anatomy;
-    conducting = { repoRoot, orch, workspaces, cockpit, stage, library, anatomy };
+    conducting = { repoRoot, orch, workspaces, cockpit, stage, review, library, anatomy };
   }
 
   // Commands and the tree view register unconditionally. Handlers below read the

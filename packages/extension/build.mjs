@@ -48,6 +48,17 @@ const anatomyWebview = {
   sourcemap: true,
 };
 
+/** Full-width review webview client: browser IIFE, no externals. */
+const reviewWebview = {
+  entryPoints: ["src/webview/review-main.ts"],
+  outfile: "dist/webview/review-main.js",
+  bundle: true,
+  platform: "browser",
+  format: "iife",
+  target: "es2020",
+  sourcemap: true,
+};
+
 function copyStyles() {
   mkdirSync("dist/webview", { recursive: true });
   copyFileSync("src/webview/style.css", "dist/webview/style.css");
@@ -60,11 +71,12 @@ if (watch) {
   const b = await context(webview);
   const c = await context(libraryWebview);
   const d = await context(anatomyWebview);
-  await Promise.all([a.watch(), b.watch(), c.watch(), d.watch()]);
+  const f = await context(reviewWebview);
+  await Promise.all([a.watch(), b.watch(), c.watch(), d.watch(), f.watch()]);
   copyStyles();
   console.log("esbuild watching...");
 } else {
-  await Promise.all([build(host), build(webview), build(libraryWebview), build(anatomyWebview)]);
+  await Promise.all([build(host), build(webview), build(libraryWebview), build(anatomyWebview), build(reviewWebview)]);
   copyStyles();
   console.log("esbuild done");
 }

@@ -259,6 +259,8 @@ document.addEventListener("click", (e) => {
       vscode.postMessage({ type: "create-pr", agentId: id });
     } else if (action === "retry-cleanup") {
       vscode.postMessage({ type: "retry-cleanup", agentId: id });
+    } else if (action === "open-review") {
+      vscode.postMessage({ type: "open-review", agentId: id });
     }
     return;
   }

@@ -22,6 +22,23 @@ export function escapeHtml(text: string): string {
     .replace(/`/g, "&#96;");
 }
 
+/** The webview shell for the full-width review panel. Mirrors getStageHtml. */
+export function getReviewHtml(scriptUri: string, nonce: string, cspSource: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} https: data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maestro Review</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+}
+
 /** The webview shell. scriptUri/styleUri are webview-safe URIs; cspSource is webview.cspSource. */
 export function getStageHtml(scriptUri: string, styleUri: string, nonce: string, cspSource: string): string {
   return `<!DOCTYPE html>
