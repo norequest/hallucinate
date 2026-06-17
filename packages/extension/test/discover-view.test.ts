@@ -27,7 +27,7 @@ describe("selectDiscover — grouping", () => {
     const vm = selectDiscover(items, "", "all", false);
     const inRepo = vm.groups.find((g) => g.group === "in-repo")!;
     expect(inRepo.count).toBe(1);
-    expect(inRepo.cards[0].name).toBe("Test Agent");
+    expect(inRepo.cards[0]!.name).toBe("Test Agent");
   });
 
   it("places likely non-plugin items in in-repo", () => {
@@ -44,7 +44,7 @@ describe("selectDiscover — grouping", () => {
     const vm = selectDiscover(items, "", "all", false);
     const plugins = vm.groups.find((g) => g.group === "plugins")!;
     expect(plugins.count).toBe(1);
-    expect(plugins.cards[0].sourceBadge).toBe("Plugin · my-plugin");
+    expect(plugins.cards[0]!.sourceBadge).toBe("Plugin · my-plugin");
   });
 
   it("places plugin-skill items in plugins group", () => {
@@ -95,7 +95,7 @@ describe("selectDiscover — counts", () => {
     const vm = selectDiscover(items, "alpha", "all", false);
     const inRepo = vm.groups.find((g) => g.group === "in-repo")!;
     expect(inRepo.count).toBe(1);
-    expect(inRepo.cards[0].name).toBe("Alpha");
+    expect(inRepo.cards[0]!.name).toBe("Alpha");
   });
 });
 
@@ -110,7 +110,7 @@ describe("selectDiscover — filter", () => {
     const vm = selectDiscover(items, "alpha", "all", false);
     const inRepo = vm.groups.find((g) => g.group === "in-repo")!;
     expect(inRepo.count).toBe(1);
-    expect(inRepo.cards[0].name).toBe("AlPhA Agent");
+    expect(inRepo.cards[0]!.name).toBe("AlPhA Agent");
   });
 
   it("narrows cards by description", () => {
@@ -131,7 +131,7 @@ describe("selectDiscover — filter", () => {
     const vm = selectDiscover(items, "eslint", "all", false);
     const inRepo = vm.groups.find((g) => g.group === "in-repo")!;
     expect(inRepo.count).toBe(1);
-    expect(inRepo.cards[0].name).toBe("A");
+    expect(inRepo.cards[0]!.name).toBe("A");
   });
 
   it("is case-insensitive on description", () => {
@@ -159,35 +159,35 @@ describe("selectDiscover — canDispatch and canAdopt", () => {
   it("canDispatch is false for a likely (medium confidence) item", () => {
     const items = [makeItem({ confidence: "likely" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.canDispatch).toBe(false);
   });
 
   it("canDispatch is true for a verified item", () => {
     const items = [makeItem({ confidence: "verified" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.canDispatch).toBe(true);
   });
 
   it("canAdopt is false for an instructions-confidence item", () => {
     const items = [makeItem({ kind: "instructions", confidence: "instructions" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "instructions")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "instructions")!.cards[0]!;
     expect(card.canAdopt).toBe(false);
   });
 
   it("canAdopt is true for a verified item", () => {
     const items = [makeItem({ confidence: "verified" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.canAdopt).toBe(true);
   });
 
   it("canAdopt is true for a likely item", () => {
     const items = [makeItem({ confidence: "likely" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.canAdopt).toBe(true);
   });
 });
@@ -199,7 +199,7 @@ describe("selectDiscover — skillChips and overflowSkills", () => {
     const tools = ["a", "b", "c", "d", "e", "f"];
     const items = [makeItem({ declaredTools: tools })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.skillChips).toHaveLength(4);
     expect(card.skillChips).toEqual(["a", "b", "c", "d"]);
   });
@@ -208,7 +208,7 @@ describe("selectDiscover — skillChips and overflowSkills", () => {
     const tools = ["a", "b", "c", "d", "e", "f"];
     const items = [makeItem({ declaredTools: tools })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.overflowSkills).toBe(2);
   });
 
@@ -216,7 +216,7 @@ describe("selectDiscover — skillChips and overflowSkills", () => {
     const tools = ["a", "b", "c"];
     const items = [makeItem({ declaredTools: tools })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.overflowSkills).toBe(0);
   });
 
@@ -224,14 +224,14 @@ describe("selectDiscover — skillChips and overflowSkills", () => {
     const tools = ["a", "b", "c", "d"];
     const items = [makeItem({ declaredTools: tools })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.overflowSkills).toBe(0);
   });
 
   it("overflowSkills is 0 when no tools declared", () => {
     const items = [makeItem({ declaredTools: [] })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.overflowSkills).toBe(0);
     expect(card.skillChips).toHaveLength(0);
   });
@@ -245,7 +245,7 @@ describe("selectDiscover — marketplace group", () => {
     const marketplace = vm.groups.find((g) => g.group === "marketplace")!;
     expect(marketplace.count).toBe(1);
     expect(marketplace.cards).toHaveLength(1);
-    expect(marketplace.cards[0].id).toBe("__marketplace__");
+    expect(marketplace.cards[0]!.id).toBe("__marketplace__");
   });
 
   it("marketplace placeholder card is present even when filter matches nothing", () => {
@@ -253,12 +253,12 @@ describe("selectDiscover — marketplace group", () => {
     const vm = selectDiscover(items, "xxxxxxxxxxx", "all", false);
     const marketplace = vm.groups.find((g) => g.group === "marketplace")!;
     expect(marketplace.count).toBe(1);
-    expect(marketplace.cards[0].id).toBe("__marketplace__");
+    expect(marketplace.cards[0]!.id).toBe("__marketplace__");
   });
 
   it("marketplace placeholder has correct static fields", () => {
     const vm = selectDiscover([], "", "all", false);
-    const card = vm.groups.find((g) => g.group === "marketplace")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "marketplace")!.cards[0]!;
     expect(card.name).toBe("Browse Marketplace");
     expect(card.description).toContain("Marketplace");
     expect(card.sourceBadge).toBe("Marketplace");
@@ -363,42 +363,42 @@ describe("selectDiscover — engineId derivation", () => {
   it("copilot-agent kind → engineId copilot", () => {
     const items = [makeItem({ kind: "copilot-agent" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.engineId).toBe("copilot");
   });
 
   it("copilot-chatmode kind → engineId copilot", () => {
     const items = [makeItem({ kind: "copilot-chatmode" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.engineId).toBe("copilot");
   });
 
   it("plugin-agent kind → engineId copilot", () => {
     const items = [makeItem({ kind: "plugin-agent", source: "b.md" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0]!;
     expect(card.engineId).toBe("copilot");
   });
 
   it("claude-agent kind → engineId acp", () => {
     const items = [makeItem({ kind: "claude-agent" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.engineId).toBe("acp");
   });
 
   it("engineHint starting with 'copilot' → engineId copilot", () => {
     const items = [makeItem({ kind: "claude-agent", engineHint: "copilot-gpt4" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.engineId).toBe("copilot");
   });
 
   it("no engineHint on conductor-role kind → engineId acp", () => {
     const items = [makeItem({ kind: "conductor-role" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.engineId).toBe("acp");
   });
 });
@@ -411,28 +411,28 @@ describe("selectDiscover — sourceBadge", () => {
       makeItem({ kind: "plugin-agent", pluginName: "My Copilot Plugin", source: "p.md" }),
     ];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0]!;
     expect(card.sourceBadge).toBe("Plugin · My Copilot Plugin");
   });
 
   it("plugin-agent with pluginStem (no pluginName) uses pluginStem in badge", () => {
     const items = [makeItem({ kind: "plugin-agent", pluginStem: "my-plugin", source: "p.md" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0]!;
     expect(card.sourceBadge).toBe("Plugin · my-plugin");
   });
 
   it("plugin-agent with neither pluginName nor pluginStem falls back to 'Plugin'", () => {
     const items = [makeItem({ kind: "plugin-agent", source: "p.md" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "plugins")!.cards[0]!;
     expect(card.sourceBadge).toBe("Plugin · Plugin");
   });
 
   it("repo item sourceBadge is the source path", () => {
     const items = [makeItem({ kind: "claude-agent", source: ".claude/agents/my-agent.md" })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.sourceBadge).toBe(".claude/agents/my-agent.md");
   });
 });
@@ -468,7 +468,7 @@ describe("selectDiscover — card id", () => {
     const source = ".claude/agents/my-fancy-agent.md";
     const items = [makeItem({ source })];
     const vm = selectDiscover(items, "", "all", false);
-    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0];
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.id).toBe(source);
   });
 });
