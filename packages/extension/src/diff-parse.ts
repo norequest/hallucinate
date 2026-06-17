@@ -60,7 +60,7 @@ export function parseUnifiedDiff(patch: string): ParsedDiff {
     // Skip the "diff --git a/... b/..." header line
     const diffLine = sectionLines[i];
     if (!diffLine || !diffLine.startsWith("diff --git ")) {
-      // This is not a valid diff section — skip
+      // This is not a valid diff section, skip
       continue;
     }
     i++;
@@ -118,7 +118,7 @@ export function parseUnifiedDiff(patch: string): ParsedDiff {
       const line = sectionLines[i]!;
       const hunkMatch = HUNK_HEADER_RE.exec(line);
       if (!hunkMatch) {
-        // Not a hunk header — skip (could be a trailing binary marker, etc.)
+        // Not a hunk header, skip (could be a trailing binary marker, etc.)
         i++;
         continue;
       }
@@ -152,7 +152,7 @@ export function parseUnifiedDiff(patch: string): ParsedDiff {
           // Context line (leading space) or blank line within hunk
           hunkLines.push({ kind: "context", text: l.startsWith(" ") ? l.slice(1) : l, oldNo: oldNo++, newNo: newNo++ });
         } else {
-          // Unclassifiable line (e.g. "\\ No newline at end of file") — skip
+          // Unclassifiable line (e.g. "\\ No newline at end of file"), skip
         }
 
         i++;

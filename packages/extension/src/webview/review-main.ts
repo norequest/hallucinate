@@ -85,7 +85,16 @@ document.addEventListener("click", (e) => {
   } else if (action === "approve") {
     const approvalId = btn.dataset["approvalId"];
     if (approvalId) {
+      // M6 tool-approval (only present on awaiting-approval cards).
       vscode.postMessage({ type: "approve", agentId: id, approvalId, decision: "allow" });
+    } else {
+      // Review sign-off on a done/conflict card: "the work is good, but do not
+      // merge yet." There is no backing orchestrator action for a soft sign-off,
+      // so acknowledge it locally rather than silently dropping the click; the
+      // card stays done on the board, ready to merge later.
+      btn.textContent = "Approved";
+      btn.setAttribute("disabled", "");
+      (btn as HTMLButtonElement).style.opacity = "0.6";
     }
   } else if (action === "deny") {
     const approvalId = btn.dataset["approvalId"];

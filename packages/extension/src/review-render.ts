@@ -8,7 +8,7 @@ import type { CardVM } from "@maestro/cockpit";
 import { escapeHtml } from "./html.js";
 import type { ParsedDiff, DiffFileChange, DiffLine } from "./diff-parse.js";
 
-// ─── Palette (fixed hex — R2: never var(--vscode-*)) ─────────────────────────
+// ─── Palette (fixed hex, R2: never var(--vscode-*)) ─────────────────────────
 
 const C = {
   bg: "#1e1e1e",
@@ -207,8 +207,13 @@ function decisionBar(card: CardVM, opts: ReviewOpts, diffErrorPresent: boolean):
   const primaryStyle = `padding:6px 14px;background:${C.primary};color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600`;
   const dangerStyle = `padding:6px 14px;background:${C.primaryDanger};color:#fff;border:none;border-radius:4px;cursor:pointer`;
   const secondaryStyle = `padding:6px 14px;background:${C.bgCard};color:${C.textMuted};border:1px solid ${C.bgCardBorder};border-radius:4px;cursor:pointer`;
+  // flex-wrap so the full-width feedback textarea sits on its own row above the buttons.
+  const barStyle = `display:flex;flex-wrap:wrap;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}`;
+  // The "Request changes" (sendBack) handler in review-main reads the textarea inside
+  // this footer. Without it the button could not collect feedback to re-launch with.
+  const feedback = `<textarea data-role="feedback" placeholder="Feedback for Request changes (optional)..." style="flex-basis:100%;min-height:44px;background:#242424;color:#e8e8e8;border:1px solid #3a3a3a;border-radius:4px;padding:6px;box-sizing:border-box;font:inherit"></textarea>`;
 
-  // merge-cleanup-failed: retry-cleanup primary
+  // merge-cleanup-failed: retry-cleanup primary (no feedback row)
   if (card.state === "merge-cleanup-failed") {
     return `<footer style="display:flex;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}">
   ${btn("Retry cleanup", "retry-cleanup", id, primaryStyle)}
@@ -218,7 +223,8 @@ function decisionBar(card: CardVM, opts: ReviewOpts, diffErrorPresent: boolean):
 
   // conflict: finish-merge primary
   if (card.state === "conflict") {
-    return `<footer style="display:flex;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}">
+    return `<footer style="${barStyle}">
+  ${feedback}
   ${btn("Resolve and merge", "finish-merge", id, primaryStyle)}
   ${btn("Resolve in Editor", "resolve-conflict", id, secondaryStyle)}
   ${btn("Discard", "discard", id, dangerStyle)}
@@ -227,7 +233,7 @@ function decisionBar(card: CardVM, opts: ReviewOpts, diffErrorPresent: boolean):
 </footer>`;
   }
 
-  // pr-created: terminal state — just discard
+  // pr-created: terminal state, just discard (no feedback row)
   if (card.state === "pr-created") {
     return `<footer style="display:flex;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}">
   ${btn("Discard", "discard", id, secondaryStyle)}
@@ -237,7 +243,8 @@ function decisionBar(card: CardVM, opts: ReviewOpts, diffErrorPresent: boolean):
   // PR mode: create-pr primary
   if (opts.prMode) {
     const label = opts.prDraft ? "Create draft PR" : "Create PR";
-    return `<footer style="display:flex;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}">
+    return `<footer style="${barStyle}">
+  ${feedback}
   ${btn(label, "create-pr", id, primaryStyle)}
   ${btn("Discard", "discard", id, dangerStyle)}
   ${btn("Request changes", "sendBack", id, secondaryStyle)}
@@ -247,7 +254,8 @@ function decisionBar(card: CardVM, opts: ReviewOpts, diffErrorPresent: boolean):
 
   // Normal: merge primary (disabled if diffError)
   const mergeDisabled = diffErrorPresent ? " disabled" : "";
-  return `<footer style="display:flex;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}">
+  return `<footer style="${barStyle}">
+  ${feedback}
   <button data-action="merge" data-id="${escapeHtml(id)}" style="${primaryStyle}"${mergeDisabled}>Merge into main</button>
   ${btn("Discard", "discard", id, dangerStyle)}
   ${btn("Request changes", "sendBack", id, secondaryStyle)}
