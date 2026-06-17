@@ -38,7 +38,8 @@
       "title": "Maestro",
       "properties": {
         "maestro.prMode": { "type": "boolean", "default": false, "description": "Create a pull request (push branch + gh pr create) instead of a local merge." },
-        "maestro.prDraft": { "type": "boolean", "default": false, "description": "Open pull requests as drafts when PR mode is on." }
+        "maestro.prDraft": { "type": "boolean", "default": false, "description": "Open pull requests as drafts when PR mode is on." },
+        "maestro.discoverPlugins": { "type": "boolean", "default": false, "description": "Scan installed Copilot plugins during discovery." }
       }
     }
   },

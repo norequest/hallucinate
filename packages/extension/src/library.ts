@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { createLibrary } from "./library-controller.js";
 import { getLibraryHtml, makeNonce } from "./library-html.js";
 import { isLibraryMessage } from "./library-protocol.js";
-import type { LibrarySnapshot } from "./library-protocol.js";
+import type { HostToLibrary, LibrarySnapshot } from "./library-protocol.js";
 import type { ConfigGateway } from "./library-controller.js";
 
 /**
@@ -14,16 +14,19 @@ export class LibraryWebviewPanel {
   private panel: vscode.WebviewPanel | undefined;
   private lastSnapshot: LibrarySnapshot | undefined;
   private readonly library: ReturnType<typeof createLibrary>;
+  private readonly discoverCtrl: { handle(msg: unknown): Promise<void> } | undefined;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     gateway: ConfigGateway,
+    discoverCtrl?: { handle(msg: unknown): Promise<void> },
   ) {
     // Wire the controller: onSnapshot posts the new state to the webview.
     this.library = createLibrary(gateway, (snap) => {
       this.lastSnapshot = snap;
       this.post(snap);
     });
+    this.discoverCtrl = discoverCtrl;
   }
 
   reveal(): void {
@@ -54,7 +57,17 @@ export class LibraryWebviewPanel {
     // Validate every inbound message at the boundary; drop anything malformed.
     panel.webview.onDidReceiveMessage((msg: unknown) => {
       if (isLibraryMessage(msg)) {
-        void this.library.handle(msg);
+        if (
+          msg.type === "scan-repo" ||
+          msg.type === "scan-plugins" ||
+          msg.type === "adopt-agent" ||
+          msg.type === "adopt-skill" ||
+          msg.type === "browse-source"
+        ) {
+          if (this.discoverCtrl) void this.discoverCtrl.handle(msg);
+        } else {
+          void this.library.handle(msg);
+        }
       }
     });
     panel.onDidDispose(() => { this.panel = undefined; });
@@ -63,6 +76,11 @@ export class LibraryWebviewPanel {
     if (this.lastSnapshot) {
       this.post(this.lastSnapshot);
     }
+  }
+
+  /** Push a discover-results message into the webview. */
+  postDiscover(msg: Extract<HostToLibrary, { type: "discover-results" }>): void {
+    void this.panel?.webview.postMessage(msg);
   }
 
   post(snapshot: LibrarySnapshot): void {

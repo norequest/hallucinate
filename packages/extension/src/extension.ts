@@ -9,11 +9,28 @@ import { teamQuickPickItems } from "./team-picker.js";
 import { StageWebviewPanel } from "./stage.js";
 import { EventLogger } from "./persistence.js";
 import { FsPersistenceBackend } from "./persistence-fs.js";
-import { loadConductorDir, makeNodeFsReader, scaffoldIfMissing, makeNodeFsWriter, DEFAULT_CONFIG, loadSkills, loadSoul } from "@maestro/config";
+import { loadConductorDir, makeNodeFsReader, scaffoldIfMissing, makeNodeFsWriter, DEFAULT_CONFIG, loadSkills, loadSoul, discoverWorkspace, discoverPlugins as discoverPluginsFn } from "@maestro/config";
+import type { McpInventory } from "@maestro/config";
 import { isKnownEngineId, loadComposerData } from "./composer-data.js";
 import { makeConfigGateway, makeAnatomyGateway } from "./config-gateway.js";
 import { LibraryWebviewPanel } from "./library.js";
 import { AnatomyWebviewPanel } from "./anatomy.js";
+
+/**
+ * Get the HEAD SHA of the repo at the given root. Returns undefined when git
+ * is unavailable or the directory is not a repo.
+ */
+async function getHeadSha(repoRoot: string): Promise<string | undefined> {
+  try {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoRoot });
+    return stdout.trim();
+  } catch {
+    return undefined;
+  }
+}
 
 const DEFAULT_ROLE: Role = {
   name: "Implementer",
@@ -233,9 +250,74 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push({ dispose: () => cockpit.dispose() });
 
     const gateway = makeConfigGateway(repoRoot);
-    const library = new LibraryWebviewPanel(context.extensionUri, gateway);
+
+    // ── Discover controller ───────────────────────────────────────────────────
+    // Use lazy closures for library/anatomy (created below) to avoid circular
+    // init order. lastMcpInventory is updated each time scan results arrive.
+    let libraryRef: LibraryWebviewPanel | undefined;
+    let anatomyRef: AnatomyWebviewPanel | undefined;
+    let lastMcpInventory: McpInventory = { servers: [] };
+
+    const { createDiscoverController } = await import("./discover-controller.js");
+    const discoverCtrl = createDiscoverController({
+      async scanWorkspace() {
+        const reader = await makeNodeFsReader();
+        return discoverWorkspace(repoRoot, reader);
+      },
+      async scanPlugins() {
+        const pluginsEnabled = vscode.workspace
+          .getConfiguration("maestro")
+          .get<boolean>("discoverPlugins", false);
+        if (!pluginsEnabled) return { items: [], mcp: { servers: [] }, skipped: [] };
+        const reader = await makeNodeFsReader();
+        const { homedir } = await import("node:os");
+        const pluginResult = await discoverPluginsFn(homedir(), reader);
+        // Adapt PluginDiscoverResult → DiscoverResult (different mcp field shape)
+        return {
+          items: pluginResult.items,
+          mcp: { servers: pluginResult.mcpServers },
+          skipped: [],
+        };
+      },
+      async headSha() {
+        return getHeadSha(repoRoot);
+      },
+      async writeSkill(_name, item) {
+        await gateway.saveSkill(
+          {
+            name: item.name,
+            description: item.description,
+            allowedTools: item.declaredTools.length > 0 ? item.declaredTools : undefined,
+          },
+          item.body,
+        );
+      },
+      mcpInventory() {
+        return lastMcpInventory;
+      },
+      openAnatomyEditor(draft) {
+        if (anatomyRef) void anatomyRef.openDraft(draft);
+      },
+      openSkillEditor(_item, _provenance) {
+        if (libraryRef) libraryRef.reveal();
+        void vscode.window.showInformationMessage(
+          "Maestro: skill adopted. Open the Skills tab in the Library to view it.",
+        );
+      },
+      now() {
+        return new Date().toISOString().slice(0, 10);
+      },
+      emit(msg) {
+        lastMcpInventory = msg.mcp;
+        libraryRef?.postDiscover(msg);
+      },
+    });
+
+    const library = new LibraryWebviewPanel(context.extensionUri, gateway, discoverCtrl);
+    libraryRef = library;
     const anatomyGateway = makeAnatomyGateway(repoRoot);
     const anatomy = new AnatomyWebviewPanel(context.extensionUri, anatomyGateway);
+    anatomyRef = anatomy;
     conducting = { repoRoot, orch, workspaces, cockpit, stage, library, anatomy };
   }
 
