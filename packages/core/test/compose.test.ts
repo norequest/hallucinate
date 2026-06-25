@@ -16,7 +16,10 @@ describe("composePreamble", () => {
       soul: soulFixture,
       instructions: "Review the PR carefully.",
       tools: "Read (read-only)\nSearch (read-only)",
-      skills: ["## skill-a\nDo step one.", "## skill-b\nDo step two."],
+      skills: [
+        { name: "skill-a", description: "Do step one.", content: "## skill-a\nDo step one." },
+        { name: "skill-b", description: "Do step two.", content: "## skill-b\nDo step two." },
+      ],
       task: "Review PR #42.",
     };
     const out = composePreamble(parts);
@@ -32,6 +35,28 @@ describe("composePreamble", () => {
     expect(idxTools).toBeGreaterThan(idxInstructions);
     expect(idxSkills).toBeGreaterThan(idxTools);
     expect(idxTask).toBeGreaterThan(idxSkills);
+  });
+
+  it("advertises skills by name and description, never inlining bodies", () => {
+    const parts: PreambleParts = {
+      instructions: "Coordinate the team.",
+      skills: [
+        { name: "skill-a", description: "Do step one.", content: "## skill-a\nfull body A" },
+        { name: "skill-b", content: "## skill-b\nfull body B" },
+      ],
+      task: "Plan the work.",
+    };
+    const out = composePreamble(parts);
+
+    // The new header: a lightweight pointer, not "standing procedures".
+    expect(out).toContain("# Skills (available, load when relevant)");
+    expect(out).not.toContain("standing procedures");
+    // Name + description line when a description exists, name-only otherwise.
+    expect(out).toContain("- skill-a: Do step one.");
+    expect(out).toContain("- skill-b");
+    // The body text must NOT be inlined.
+    expect(out).not.toContain("full body A");
+    expect(out).not.toContain("full body B");
   });
 
   it("frames red lines before Instructions AND output matches /override the task/i", () => {

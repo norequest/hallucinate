@@ -199,7 +199,7 @@ export function runConformanceSuite(label: string, factory: AdapterFactory): voi
         soul: liveAgent!.task.soulDoc,
         instructions: roleWithSoul.instructions,
         tools: renderToolsForPreamble(roleWithSoul.tools),
-        skills: liveAgent!.task.skillBodies,
+        skills: liveAgent!.task.skills,
         task: "add caching",
       });
       const redLinePos = rendered.indexOf("never delete production data");

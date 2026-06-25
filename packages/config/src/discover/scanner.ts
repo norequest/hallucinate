@@ -4,6 +4,7 @@ import type { DiscoveredItem } from "./types.js";
 import type { McpInventory } from "./mcp.js";
 import { parseDiscoveredFile } from "./sources.js";
 import { readMcpInventory } from "./mcp.js";
+import { dedupeDiscoveredAgents } from "./dedupe.js";
 import type { SourceKind } from "./types.js";
 
 /**
@@ -112,7 +113,12 @@ export async function discoverWorkspace(root: string, fs: FsScanner): Promise<Di
   // --- MCP inventory (never throws) ---
   const mcp = await readMcpInventory(root, fs).catch(() => ({ servers: [] }));
 
-  return { items, mcp, skipped };
+  // Dedup agents as the LAST step before returning. The same logical agent can
+  // exist as both a canonical .conductor/roles/*.yaml role and a
+  // .github/agents/*.agent.md Copilot mirror that Maestro itself writes, so
+  // without this collapse the same agent would appear twice in the Discover view.
+  // Only items are deduped; mcp and skipped are returned untouched.
+  return { items: dedupeDiscoveredAgents(items), mcp, skipped };
 
   // ---------------------------------------------------------------------------
   // Internal helpers

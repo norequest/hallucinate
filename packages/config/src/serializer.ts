@@ -1,6 +1,7 @@
 import { stringify as stringifyYaml } from "yaml";
 import type { Role, Team } from "@maestro/core";
 import type { SkillManifest } from "./skill-types.js";
+import type { MaestroConfig } from "./types.js";
 
 /**
  * Serialize a Role to a YAML string suitable for writing to .conductor/roles/<name>.yaml.
@@ -50,7 +51,7 @@ export function serializeRole(role: Role): string {
 /**
  * Serialize a SkillManifest and body text to a SKILL.md string.
  * Produces a YAML frontmatter block followed by the body text.
- * Suitable for writing to .conductor/skills/<name>/SKILL.md.
+ * Suitable for writing to .github/skills/<name>/SKILL.md.
  */
 export function serializeSkill(manifest: SkillManifest, body: string): string {
   const frontmatterDoc: Record<string, unknown> = {
@@ -63,12 +64,37 @@ export function serializeSkill(manifest: SkillManifest, body: string): string {
 }
 
 /**
+ * Serialize a MaestroConfig to a YAML string for .conductor/config.yaml.
+ * Always writes `maxParallelAgents`. The optional `defaults` block is written
+ * only when present, in the same field-by-field style the other serializers use
+ * (each sub-field included only when defined), so parse(serialize(x)) round-trips.
+ */
+export function serializeConfig(config: MaestroConfig): string {
+  const defaults = config.defaults;
+  let defaultsDoc: Record<string, unknown> | undefined;
+  if (defaults !== undefined) {
+    defaultsDoc = {
+      ...(defaults.instructions !== undefined ? { instructions: defaults.instructions } : {}),
+      ...(defaults.skills !== undefined ? { skills: defaults.skills } : {}),
+      ...(defaults.leadSkills !== undefined ? { leadSkills: defaults.leadSkills } : {}),
+    };
+  }
+
+  const doc: Record<string, unknown> = {
+    maxParallelAgents: config.maxParallelAgents,
+    ...(defaultsDoc !== undefined ? { defaults: defaultsDoc } : {}),
+  };
+  return stringifyYaml(doc, { lineWidth: 120 });
+}
+
+/**
  * Serialize a Team to a YAML string suitable for writing to .conductor/teams/<name>.yaml.
  * Role references are stored as name strings (resolved at load time).
  */
 export function serializeTeam(team: Team): string {
   const doc: Record<string, unknown> = {
     name: team.name,
+    ...(team.lead !== undefined ? { lead: team.lead } : {}),
     roles: team.roles.map((r) => r.name),
   };
   return stringifyYaml(doc, { lineWidth: 120 });

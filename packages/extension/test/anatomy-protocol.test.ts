@@ -81,6 +81,18 @@ describe("isAnatomyMessage", () => {
     ).toBe(true);
   });
 
+  it("accepts role-attach-skill with string roleName and skillName", () => {
+    expect(
+      isAnatomyMessage({ type: "role-attach-skill", roleName: "Tester", skillName: "run-tests" })
+    ).toBe(true);
+  });
+
+  it("accepts role-detach-skill with string roleName and skillName", () => {
+    expect(
+      isAnatomyMessage({ type: "role-detach-skill", roleName: "Tester", skillName: "run-tests" })
+    ).toBe(true);
+  });
+
   // ─── rejects missing roleName ──────────────────────────────────────────────
 
   it("rejects open-anatomy with missing roleName", () => {
@@ -109,6 +121,14 @@ describe("isAnatomyMessage", () => {
 
   it("rejects grant-tool with missing roleName", () => {
     expect(isAnatomyMessage({ type: "grant-tool", tool: "Git", write: true })).toBe(false);
+  });
+
+  it("rejects role-attach-skill with missing roleName", () => {
+    expect(isAnatomyMessage({ type: "role-attach-skill", skillName: "run-tests" })).toBe(false);
+  });
+
+  it("rejects role-detach-skill with missing roleName", () => {
+    expect(isAnatomyMessage({ type: "role-detach-skill", skillName: "run-tests" })).toBe(false);
   });
 
   // ─── rejects bad autonomy ─────────────────────────────────────────────────
@@ -173,6 +193,28 @@ describe("isAnatomyMessage", () => {
 
   it("rejects grant-tool with missing tool field", () => {
     expect(isAnatomyMessage({ type: "grant-tool", roleName: "Tester", write: true })).toBe(false);
+  });
+
+  // ─── rejects skill verbs with bad skillName ──────────────────────────────
+
+  it("rejects role-attach-skill with missing skillName", () => {
+    expect(isAnatomyMessage({ type: "role-attach-skill", roleName: "Tester" })).toBe(false);
+  });
+
+  it("rejects role-attach-skill with non-string skillName", () => {
+    expect(
+      isAnatomyMessage({ type: "role-attach-skill", roleName: "Tester", skillName: 42 })
+    ).toBe(false);
+  });
+
+  it("rejects role-detach-skill with missing skillName", () => {
+    expect(isAnatomyMessage({ type: "role-detach-skill", roleName: "Tester" })).toBe(false);
+  });
+
+  it("rejects role-detach-skill with non-string skillName", () => {
+    expect(
+      isAnatomyMessage({ type: "role-detach-skill", roleName: "Tester", skillName: 42 })
+    ).toBe(false);
   });
 
   // ─── rejects unknown type and null ────────────────────────────────────────

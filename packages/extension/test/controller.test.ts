@@ -20,6 +20,8 @@ function fakeOrch() {
     sendBack: (id: string, fb: string) => { calls.push(`sendBack:${id}:${fb}`); return {} as Agent; },
     retryCleanup: async (id: string) => { calls.push(`retryCleanup:${id}`); },
     markPrCreated: async (id: string) => { calls.push(`markPrCreated:${id}`); },
+    approveDelegation: (id: string) => { calls.push(`approveDelegation:${id}`); return {} as Agent; },
+    denyDelegation: (id: string) => { calls.push(`denyDelegation:${id}`); },
   };
   return { orch, calls, spawnArgs, dispatchArgs, emit: (e: OrchestratorEvent) => listener?.(e) };
 }
@@ -236,5 +238,135 @@ describe("createCockpit", () => {
     const cockpit = createCockpit(orch, () => {});
     // Should not throw when no callback is provided
     expect(() => cockpit.handle({ type: "open-review", agentId: "a9" })).not.toThrow();
+  });
+
+  // ─── Lead-orchestrated teams: delegation approve / deny ───────────────────
+
+  it("approve-delegation calls orch.approveDelegation with the delegation id", () => {
+    const { orch, calls } = fakeOrch();
+    const cockpit = createCockpit(orch, () => {});
+    cockpit.handle({ type: "approve-delegation", id: "d1" });
+    expect(calls).toContain("approveDelegation:d1");
+  });
+
+  it("deny-delegation calls orch.denyDelegation with the delegation id", () => {
+    const { orch, calls } = fakeOrch();
+    const cockpit = createCockpit(orch, () => {});
+    cockpit.handle({ type: "deny-delegation", id: "d2" });
+    expect(calls).toContain("denyDelegation:d2");
+  });
+
+  // ─── Clear-done-lane: bulk discard of ready-to-review (done) cards ─────────
+
+  /** A done agent with a non-empty diff so it lands in the "done" lane/state. */
+  const doneAgent = (id: string): Agent => ({
+    ...agent(id),
+    state: "done",
+    diff: { files: ["a.ts"], patch: "P" },
+  });
+
+  it("clear-done-lane with confirm=true discards EVERY done agent", async () => {
+    const { orch, calls, emit } = fakeOrch();
+    const confirmClearDone = vi.fn(async () => true);
+    const cockpit = createCockpit(orch, () => {}, undefined, undefined, undefined, confirmClearDone);
+    // Two done agents + one working agent on the board.
+    emit({ kind: "agent-added", agent: doneAgent("d1") });
+    emit({ kind: "agent-added", agent: doneAgent("d2") });
+    emit({ kind: "agent-added", agent: agent("w1") });
+    cockpit.handle({ type: "clear-done-lane" });
+    await new Promise((r) => setTimeout(r, 0));
+    // Confirmed with the count of done cards (2), then discarded each done id.
+    expect(confirmClearDone).toHaveBeenCalledWith(2);
+    expect(calls).toContain("discard:d1");
+    expect(calls).toContain("discard:d2");
+    // The working agent is NOT discarded.
+    expect(calls).not.toContain("discard:w1");
+  });
+
+  it("clear-done-lane with confirm=false is a no-op (discards nothing)", async () => {
+    const { orch, calls, emit } = fakeOrch();
+    const confirmClearDone = vi.fn(async () => false);
+    const cockpit = createCockpit(orch, () => {}, undefined, undefined, undefined, confirmClearDone);
+    emit({ kind: "agent-added", agent: doneAgent("d1") });
+    cockpit.handle({ type: "clear-done-lane" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(confirmClearDone).toHaveBeenCalledWith(1);
+    expect(calls.some((c) => c.startsWith("discard:"))).toBe(false);
+  });
+
+  it("clear-done-lane with no done cards never asks to confirm and discards nothing", async () => {
+    const { orch, calls, emit } = fakeOrch();
+    const confirmClearDone = vi.fn(async () => true);
+    const cockpit = createCockpit(orch, () => {}, undefined, undefined, undefined, confirmClearDone);
+    emit({ kind: "agent-added", agent: agent("w1") }); // working only
+    cockpit.handle({ type: "clear-done-lane" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(confirmClearDone).not.toHaveBeenCalled();
+    expect(calls.some((c) => c.startsWith("discard:"))).toBe(false);
+  });
+
+  it("clear-done-lane is a safe no-op when no confirm dependency is injected", async () => {
+    const { orch, calls, emit } = fakeOrch();
+    const cockpit = createCockpit(orch, () => {});
+    emit({ kind: "agent-added", agent: doneAgent("d1") });
+    cockpit.handle({ type: "clear-done-lane" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls.some((c) => c.startsWith("discard:"))).toBe(false);
+  });
+
+  // ─── pr-created forgets the persisted log (no ghost card on reload) ─────────
+
+  it("a pr-created transition is observed via the orchestrator subscription", () => {
+    // The persistence forget for pr-created lives at the extension wire site
+    // (extension.ts), but the controller must still reduce a pr-created
+    // agent-updated event into a clean state push without throwing.
+    const { orch, emit } = fakeOrch();
+    const states: CockpitState[] = [];
+    createCockpit(orch, (s) => states.push(s));
+    emit({ kind: "agent-added", agent: doneAgent("p1") });
+    expect(() =>
+      emit({ kind: "agent-updated", agent: { ...doneAgent("p1"), state: "pr-created" } }),
+    ).not.toThrow();
+    expect(states.length).toBeGreaterThan(0);
+  });
+
+  // ─── Read-only virtual (fleet) sub-agent guard ─────────────────────────────
+
+  it("drops a mutating action aimed at a read-only virtual sub-agent before core sees it", () => {
+    const { orch, calls, emit } = fakeOrch();
+    const cockpit = createCockpit(orch, () => {});
+    // A done virtual sub-agent is on the board.
+    emit({
+      kind: "agent-added",
+      agent: { ...doneAgent("sub1"), parentId: "lead1", virtual: true },
+    });
+    // Every mutating verb against the virtual card is silently dropped.
+    cockpit.handle({ type: "merge", agentId: "sub1" });
+    cockpit.handle({ type: "discard", agentId: "sub1" });
+    cockpit.handle({ type: "stop", agentId: "sub1" });
+    cockpit.handle({ type: "steer", agentId: "sub1", input: "go" });
+    cockpit.handle({ type: "approve", agentId: "sub1", approvalId: "x", decision: "allow" });
+    cockpit.handle({ type: "sendBack", agentId: "sub1", feedback: "redo" });
+    expect(calls.some((c) => c.includes("sub1"))).toBe(false);
+  });
+
+  it("still routes mutating actions for a NON-virtual agent (the guard is virtual-only)", () => {
+    const { orch, calls, emit } = fakeOrch();
+    const cockpit = createCockpit(orch, () => {});
+    emit({ kind: "agent-added", agent: doneAgent("real1") });
+    cockpit.handle({ type: "merge", agentId: "real1" });
+    expect(calls).toContain("merge:real1");
+  });
+
+  it("a virtual card's merge action is NOT forwarded to onMergeAction (create-pr dropped)", () => {
+    const { orch, emit } = fakeOrch();
+    const seen: string[] = [];
+    const cockpit = createCockpit(orch, () => {}, undefined, (msg) => seen.push(msg.type));
+    emit({
+      kind: "agent-added",
+      agent: { ...doneAgent("sub1"), parentId: "lead1", virtual: true },
+    });
+    cockpit.handle({ type: "create-pr", agentId: "sub1" });
+    expect(seen).toEqual([]);
   });
 });

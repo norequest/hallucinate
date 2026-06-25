@@ -8,8 +8,17 @@
  * NO node imports in this file.
  */
 
-import type { LibrarySnapshot, LibraryTab, SkillCardVM } from "./library-protocol.js";
+import type { LibrarySnapshot, LibraryTab, SkillCardVM, TeamEditVM } from "./library-protocol.js";
 import type { LibraryToHost } from "./library-protocol.js";
+
+/**
+ * The shape the gateway needs to seed a brand-new role. Kept minimal (the four
+ * fields a role file requires) so the controller never fabricates tool grants or
+ * skills the user has not asked for. The real default values live in the gateway.
+ */
+export interface NewRoleSeed {
+  name: string;
+}
 
 // ─── ConfigGateway seam ───────────────────────────────────────────────────────
 
@@ -35,6 +44,14 @@ export interface ConfigGateway {
   ): Promise<void>;
   deleteSkill(name: string): Promise<void>;
   setRoleSkills(roleName: string, skills: string[]): Promise<void>;
+  /** Seed a default role file so subsequent anatomy edits have something to load. */
+  seedRole(seed: NewRoleSeed): Promise<void>;
+  /** Delete a role: remove the single .conductor/roles/<base>.yaml file. */
+  deleteRole(name: string): Promise<void>;
+  /** Write a team: serialize name + member role names to .conductor/teams/<base>.yaml. */
+  writeTeam(team: { name: string; roleNames: string[] }): Promise<void>;
+  /** Delete a team: remove the single .conductor/teams/<base>.yaml file. */
+  deleteTeam(name: string): Promise<void>;
 }
 
 // ─── Internal state ───────────────────────────────────────────────────────────
@@ -45,6 +62,7 @@ interface LibraryState {
   roles: { name: string; engineId: string; skills: string[] }[];
   teams: { name: string; roleNames: string[] }[];
   editing?: SkillCardVM;
+  editingTeam?: TeamEditVM;
   picker?: { roleName: string };
 }
 
@@ -74,6 +92,7 @@ function buildUsedBy(
  */
 async function loadSnapshot(gw: ConfigGateway, tab: LibraryTab, extras?: {
   editing?: SkillCardVM;
+  editingTeam?: TeamEditVM;
   picker?: { roleName: string };
 }): Promise<LibraryState> {
   const [skillsResult, roles, teams] = await Promise.all([
@@ -96,6 +115,7 @@ async function loadSnapshot(gw: ConfigGateway, tab: LibraryTab, extras?: {
     roles,
     teams,
     editing: extras?.editing,
+    editingTeam: extras?.editingTeam,
     picker: extras?.picker,
   };
 }
@@ -107,6 +127,7 @@ function toSnapshot(state: LibraryState): LibrarySnapshot {
     roles: state.roles,
     teams: state.teams,
     editing: state.editing,
+    editingTeam: state.editingTeam,
     picker: state.picker,
   };
 }
@@ -125,13 +146,13 @@ export function createLibrary(
   onSnapshot: (snap: LibrarySnapshot) => void
 ): LibraryHandle {
   let state: LibraryState = {
-    tab: "skills",
+    tab: "agents",
     skills: [],
     roles: [],
     teams: [],
   };
 
-  async function reload(tab?: LibraryTab, extras?: { editing?: SkillCardVM; picker?: { roleName: string } }): Promise<void> {
+  async function reload(tab?: LibraryTab, extras?: { editing?: SkillCardVM; editingTeam?: TeamEditVM; picker?: { roleName: string } }): Promise<void> {
     state = await loadSnapshot(gw, tab ?? state.tab, extras);
     onSnapshot(toSnapshot(state));
   }
@@ -139,12 +160,12 @@ export function createLibrary(
   async function handle(msg: LibraryToHost): Promise<void> {
     switch (msg.type) {
       case "open-library": {
-        await reload("skills");
+        await reload("agents");
         return;
       }
 
       case "switch-library-tab": {
-        state = { ...state, tab: msg.tab, editing: undefined, picker: undefined };
+        state = { ...state, tab: msg.tab, editing: undefined, editingTeam: undefined, picker: undefined };
         onSnapshot(toSnapshot(state));
         return;
       }
@@ -179,6 +200,51 @@ export function createLibrary(
         await reload(state.tab, { editing: undefined, picker: undefined });
         return;
       }
+
+      // ── Group 1: Agents tab ──────────────────────────────────────────────
+      case "new-role": {
+        // name is collected by the host (native input box) and re-sent here with
+        // a value; a name-less new-role never reaches the controller, but guard
+        // anyway so an empty request is a no-op rather than seeding "undefined".
+        if (!msg.name) return;
+        // Seed a default role file so the host's follow-up open-anatomy has a
+        // role to load. The host opens the anatomy editor after this resolves.
+        await gw.seedRole({ name: msg.name });
+        await reload("agents", { editing: undefined, editingTeam: undefined, picker: undefined });
+        return;
+      }
+
+      case "delete-role": {
+        await gw.deleteRole(msg.name);
+        await reload("agents", { editing: undefined, editingTeam: undefined, picker: undefined });
+        return;
+      }
+
+      // ── Group 2: Teams tab ───────────────────────────────────────────────
+      case "team-create": {
+        const emptyTeam: TeamEditVM = { name: "", roleNames: [] };
+        state = { ...state, tab: "teams", editing: undefined, editingTeam: emptyTeam, picker: undefined };
+        onSnapshot(toSnapshot(state));
+        return;
+      }
+
+      case "team-save": {
+        await gw.writeTeam({ name: msg.name, roleNames: msg.roleNames });
+        await reload("teams", { editing: undefined, editingTeam: undefined, picker: undefined });
+        return;
+      }
+
+      case "team-delete": {
+        await gw.deleteTeam(msg.name);
+        await reload("teams", { editing: undefined, editingTeam: undefined, picker: undefined });
+        return;
+      }
+
+      // launch-team is intercepted by the EXTENSION host (it needs the
+      // orchestrator, which the controller has no access to). Reaching the
+      // controller is a no-op; the host-side onLibrary wiring handles it first.
+      case "launch-team":
+        return;
 
       case "attach-skill": {
         const role = state.roles.find((r) => r.name === msg.roleName);

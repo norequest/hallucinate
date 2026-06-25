@@ -288,4 +288,74 @@ describe("createAnatomyController", () => {
     const written = gw.writtenRoles.at(-1);
     expect(written?.instructions).toBe("Always run tests before merging.");
   });
+
+  // ─── role-attach-skill / role-detach-skill ────────────────────────────────
+
+  it("buildVM populates availableSkills with all known skills minus attached", async () => {
+    const snaps: AnatomyVM[] = [];
+    const gw = fakeGateway({ skills: ["run-tests"] });
+    const ctrl = createAnatomyController(gw, (vm) => snaps.push(vm));
+    await ctrl.handle({ type: "open-anatomy", roleName: "Tester" });
+    const snap = snaps.at(-1)!;
+    // run-tests is attached, so only read-docs is available.
+    expect(snap.skills.map((s) => s.name)).toContain("run-tests");
+    expect(snap.availableSkills.map((s) => s.name)).toEqual(["read-docs"]);
+    expect(snap.availableSkills.map((s) => s.name)).not.toContain("run-tests");
+  });
+
+  it("role-attach-skill appends a skill: it shows in vm.skills and leaves vm.availableSkills", async () => {
+    const snaps: AnatomyVM[] = [];
+    const gw = fakeGateway(); // no skills attached
+    const ctrl = createAnatomyController(gw, (vm) => snaps.push(vm));
+    await ctrl.handle({ type: "open-anatomy", roleName: "Tester" });
+    await ctrl.handle({ type: "role-attach-skill", roleName: "Tester", skillName: "read-docs" });
+    const written = gw.writtenRoles.at(-1);
+    expect(written?.skills).toContain("read-docs");
+    const snap = snaps.at(-1)!;
+    expect(snap.skills.map((s) => s.name)).toContain("read-docs");
+    expect(snap.availableSkills.map((s) => s.name)).not.toContain("read-docs");
+  });
+
+  it("role-attach-skill is idempotent: attaching an already-attached skill does not duplicate", async () => {
+    const snaps: AnatomyVM[] = [];
+    const gw = fakeGateway({ skills: ["read-docs"] });
+    const ctrl = createAnatomyController(gw, (vm) => snaps.push(vm));
+    await ctrl.handle({ type: "open-anatomy", roleName: "Tester" });
+    await ctrl.handle({ type: "role-attach-skill", roleName: "Tester", skillName: "read-docs" });
+    const written = gw.writtenRoles.at(-1);
+    const count = (written?.skills ?? []).filter((s) => s === "read-docs").length;
+    expect(count).toBe(1);
+    const snap = snaps.at(-1)!;
+    expect(snap.skills.filter((s) => s.name === "read-docs").length).toBe(1);
+  });
+
+  it("role-detach-skill removes a skill: gone from vm.skills, back in vm.availableSkills", async () => {
+    const snaps: AnatomyVM[] = [];
+    const gw = fakeGateway({ skills: ["run-tests", "read-docs"] });
+    const ctrl = createAnatomyController(gw, (vm) => snaps.push(vm));
+    await ctrl.handle({ type: "open-anatomy", roleName: "Tester" });
+    await ctrl.handle({ type: "role-detach-skill", roleName: "Tester", skillName: "read-docs" });
+    const written = gw.writtenRoles.at(-1);
+    expect(written?.skills).not.toContain("read-docs");
+    expect(written?.skills).toContain("run-tests");
+    const snap = snaps.at(-1)!;
+    expect(snap.skills.map((s) => s.name)).not.toContain("read-docs");
+    expect(snap.availableSkills.map((s) => s.name)).toContain("read-docs");
+  });
+
+  it("role-attach-skill on a non-existent role is a no-op (no writeRole, no throw)", async () => {
+    const snaps: AnatomyVM[] = [];
+    const gw = fakeGateway(undefined, { loadRole: vi.fn(async () => null) });
+    const ctrl = createAnatomyController(gw, (vm) => snaps.push(vm));
+    await ctrl.handle({ type: "role-attach-skill", roleName: "Ghost", skillName: "read-docs" });
+    expect(gw.writtenRoles.length).toBe(0);
+  });
+
+  it("role-detach-skill on a non-existent role is a no-op (no writeRole, no throw)", async () => {
+    const snaps: AnatomyVM[] = [];
+    const gw = fakeGateway(undefined, { loadRole: vi.fn(async () => null) });
+    const ctrl = createAnatomyController(gw, (vm) => snaps.push(vm));
+    await ctrl.handle({ type: "role-detach-skill", roleName: "Ghost", skillName: "read-docs" });
+    expect(gw.writtenRoles.length).toBe(0);
+  });
 });

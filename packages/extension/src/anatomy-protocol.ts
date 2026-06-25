@@ -7,7 +7,8 @@
  * NO node imports in this file.
  */
 
-import type { ToolGrant } from "@maestro/core";
+import type { Autonomy, ToolGrant } from "@maestro/core";
+import { AUTONOMY_VALUES as AUTONOMY_LEVELS } from "@maestro/core";
 import type { GrantGap } from "@maestro/config";
 
 // ─── View-model ───────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ export interface AnatomyVM {
   instructions: string;
   engineId: string;
   model?: string;
-  autonomy: "manual" | "auto-approve-safe" | "yolo";
+  autonomy: Autonomy;
   /** The name of the soul referenced by role.soul, if any. */
   soulName?: string;
   /** Resolved soul.md raw text, or "" if none. */
@@ -31,6 +32,8 @@ export interface AnatomyVM {
   toolsSummary: { granted: number; canWrite: number };
   /** Each attached/attachable skill with its grant gap precomputed. */
   skills: { name: string; allowedTools?: string[]; gap?: GrantGap | null }[];
+  /** Known skills NOT currently attached to this role, for the "+ Add skill" picker. */
+  availableSkills: { name: string; allowedTools?: string[] }[];
 }
 
 // ─── Message types ────────────────────────────────────────────────────────────
@@ -45,12 +48,14 @@ export type AnatomyToHost =
   | { type: "role-set-instructions"; roleName: string; instructions: string }
   | { type: "role-set-tools"; roleName: string; tools: ToolGrant }
   | { type: "role-set-engine"; roleName: string; engineId: string; model?: string }
-  | { type: "role-set-autonomy"; roleName: string; autonomy: "manual" | "auto-approve-safe" | "yolo" }
-  | { type: "grant-tool"; roleName: string; tool: string; write: boolean };
+  | { type: "role-set-autonomy"; roleName: string; autonomy: Autonomy }
+  | { type: "grant-tool"; roleName: string; tool: string; write: boolean }
+  | { type: "role-attach-skill"; roleName: string; skillName: string }
+  | { type: "role-detach-skill"; roleName: string; skillName: string };
 
 // ─── Autonomy value set ───────────────────────────────────────────────────────
 
-const AUTONOMY_VALUES = new Set<string>(["manual", "auto-approve-safe", "yolo"]);
+const AUTONOMY_VALUES = new Set<string>(AUTONOMY_LEVELS);
 
 // ─── Runtime guard ────────────────────────────────────────────────────────────
 
@@ -110,6 +115,12 @@ export function isAnatomyMessage(msg: unknown): msg is AnatomyToHost {
         isString(m["tool"]) &&
         typeof m["write"] === "boolean"
       );
+
+    case "role-attach-skill":
+      return isString(m["roleName"]) && isString(m["skillName"]);
+
+    case "role-detach-skill":
+      return isString(m["roleName"]) && isString(m["skillName"]);
 
     default:
       return false;

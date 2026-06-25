@@ -19,6 +19,29 @@ function makeItem(overrides: Partial<DiscoveredItem> = {}): DiscoveredItem {
   };
 }
 
+// ─── Adopted marking ──────────────────────────────────────────────────────────
+
+describe("selectDiscover — adopted", () => {
+  it("marks a card adopted when its source is in adoptedSources", () => {
+    const items = [
+      makeItem({ source: ".claude/agents/a.md", name: "A" }),
+      makeItem({ source: ".claude/agents/b.md", name: "B" }),
+    ];
+    const vm = selectDiscover(items, "", "all", false, undefined, [".claude/agents/a.md"]);
+    const inRepo = vm.groups.find((g) => g.group === "in-repo")!;
+    const a = inRepo.cards.find((c) => c.name === "A")!;
+    const b = inRepo.cards.find((c) => c.name === "B")!;
+    expect(a.adopted).toBe(true);
+    expect(b.adopted).toBe(false);
+  });
+
+  it("defaults to not-adopted when no adoptedSources are passed", () => {
+    const vm = selectDiscover([makeItem()], "", "all", false);
+    const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
+    expect(card.adopted).toBe(false);
+  });
+});
+
 // ─── Grouping ─────────────────────────────────────────────────────────────────
 
 describe("selectDiscover — grouping", () => {
@@ -259,9 +282,11 @@ describe("selectDiscover — marketplace group", () => {
   it("marketplace placeholder has correct static fields", () => {
     const vm = selectDiscover([], "", "all", false);
     const card = vm.groups.find((g) => g.group === "marketplace")!.cards[0]!;
-    expect(card.name).toBe("Browse Marketplace");
+    // Name and badge avoid the doubled word ("Browse Marketplace" + "Marketplace"
+    // badge previously read as "Browse Marketplace Marketplace" on the card).
+    expect(card.name).toBe("Marketplace");
     expect(card.description).toContain("Marketplace");
-    expect(card.sourceBadge).toBe("Marketplace");
+    expect(card.sourceBadge).toBe("Soon");
     expect(card.engineId).toBe("copilot");
     expect(card.canDispatch).toBe(false);
     expect(card.canAdopt).toBe(false);

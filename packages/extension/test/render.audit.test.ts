@@ -10,7 +10,7 @@ describe("render.ts: diffError on a done card (Issue 23)", () => {
   it("renders a diff-error note when a done card has diffError and no diff", () => {
     // diffError + actions live in the drawer; the card just shows lane/task.
     const c = card({ id: "a1", state: "done", attention: true, summary: "did it", diffError: "git diff failed: bad object", lane: "done" });
-    const html = renderDrawer({ cards: [c], focusedId: "a1" });
+    const html = renderDrawer({ cards: [c], focusedId: "a1", delegations: [] });
     expect(html).toContain("diff-error");
     expect(html).toContain("git diff failed: bad object");
     // Merge/Discard must still be reachable so the user can act.
@@ -20,7 +20,7 @@ describe("render.ts: diffError on a done card (Issue 23)", () => {
 
   it("escapes the diffError text", () => {
     const c = card({ id: "a1", state: "done", attention: true, diffError: "<img src=x onerror=alert(1)>", lane: "done" });
-    const html = renderDrawer({ cards: [c], focusedId: "a1" });
+    const html = renderDrawer({ cards: [c], focusedId: "a1", delegations: [] });
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("&lt;img");
   });

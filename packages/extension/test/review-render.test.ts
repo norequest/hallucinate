@@ -62,6 +62,15 @@ describe("renderReview — clean path", () => {
     expect(html).toContain("Add login route");
   });
 
+  it("header renders a Back-to-board button so the conductor is never stranded", () => {
+    // Regression: the full review replaces the whole board, so it MUST carry its
+    // own escape. The webview wires data-action="review-close" to backToBoard().
+    const html = renderReview(card(), parsed());
+    expect(html).toContain('data-action="review-close"');
+    expect(html).toContain("Conducting Board");
+    expect(html).toContain('class="rv-back"');
+  });
+
   it("header renders a faint goal why-line when goal is present", () => {
     const html = renderReview(card({ goal: "so that auth works" }), parsed());
     expect(html).toContain("so that auth works");
@@ -73,24 +82,90 @@ describe("renderReview — clean path", () => {
     expect(html).toContain("+1");
   });
 
-  it("contains graphite palette hex values and NOT var(--vscode-*)", () => {
+  it("renders a 'Changed files' rail eyebrow (prototype left region)", () => {
     const html = renderReview(card(), parsed());
-    expect(html).toContain("#4a9eff");
-    expect(html).toContain("#4caf50");
-    expect(html).not.toContain("var(--vscode-");
+    expect(html).toContain("rv-rail");
+    expect(html).toContain("Changed files");
   });
 
-  it("decision bar has merge, discard, sendBack, and approve data-action attributes", () => {
+  it("file rows carry a data-path hook for selection", () => {
+    const html = renderReview(card(), parsed());
+    expect(html).toContain('data-path="src/auth.ts"');
+  });
+
+  it("renders a 'What changed' band that names the role when a summary is present", () => {
+    const html = renderReview(card({ summary: "Added auth route" }), parsed());
+    expect(html).toContain("What changed");
+    // role appears in the band heading "What changed · <role>"
+    expect(html).toContain("Implementer");
+  });
+
+  it("renders a mono file-path header above the diff", () => {
+    const html = renderReview(card(), parsed());
+    expect(html).toContain("rv-path-header");
+    expect(html).toContain("rv-path-text");
+  });
+
+  it("merge primary button is green-tinted (prototype Merge into main)", () => {
+    const html = renderReview(card(), parsed());
+    // green primary uses the rgb form of #46c98a (70,201,138)
+    expect(html).toContain("rgba(70,201,138");
+    expect(html).toContain("Merge into main");
+  });
+
+  it("contains graphite palette hex values and NOT var(--vscode-*)", () => {
+    const html = renderReview(card(), parsed());
+    // Accent blue (focus rings) + the canonical TOKENS diff-add green for added
+    // lines (#7fd9a8). The earlier off-token greens/blue must be gone.
+    expect(html).toContain("#8ab8ff");
+    expect(html).toContain("#7fd9a8");
+    expect(html).not.toContain("var(--vscode-");
+    // Off-token accents from earlier passes must not survive.
+    expect(html).not.toContain("#84dcab");
+    expect(html).not.toContain("#5fcf9a");
+    expect(html).not.toContain("#7fa8d8");
+  });
+
+  it("decision bar has merge, discard, and sendBack data-action attributes", () => {
     const html = renderReview(card(), parsed());
     expect(html).toContain('data-action="merge"');
     expect(html).toContain('data-action="discard"');
     expect(html).toContain('data-action="sendBack"');
-    expect(html).toContain('data-action="approve"');
+  });
+
+  it("the review decision bar does NOT contain an Approve button", () => {
+    // The soft "Approve" sign-off was a local acknowledgment with no backing
+    // orchestrator action, so it was removed. It must not appear anywhere on the
+    // review screen (the M6 tool-approval Approve lives elsewhere, in render.ts).
+    const html = renderReview(card(), parsed());
+    expect(html).not.toContain('data-action="approve"');
+    expect(html).not.toContain(">Approve<");
+    expect(html).not.toContain("rv-btn-approve");
+  });
+
+  it("renders the brand eq mark before the WHAT CHANGED eyebrow", () => {
+    const html = renderReview(card({ summary: "Added auth route" }), parsed());
+    // The four-bar equalizer brand mark (prototype review.eq, line 1046).
+    expect(html).toContain("rv-eq-mark");
+    // It sits in the what-changed head row, ahead of the eyebrow.
+    expect(html).toContain("rv-whatchanged-head");
+    const headIdx = html.indexOf("rv-whatchanged-head");
+    const eyebrowIdx = html.indexOf("What changed");
+    const markIdx = html.indexOf("rv-eq-mark");
+    expect(markIdx).toBeGreaterThan(headIdx);
+    expect(markIdx).toBeLessThan(eyebrowIdx);
   });
 
   it("decision bar buttons carry the card id", () => {
     const html = renderReview(card({ id: "xyz-99" }), parsed());
     expect(html).toContain('data-id="xyz-99"');
+  });
+
+  it("decision footer contains the feedback textarea (footer-contains-textarea contract)", () => {
+    const html = renderReview(card(), parsed());
+    const footer = html.slice(html.indexOf("<footer"), html.indexOf("</footer>"));
+    expect(footer).toContain("<textarea");
+    expect(footer).toContain('data-role="feedback"');
   });
 
   it("escapes <script> in summary so raw tag is absent and entity is present", () => {
@@ -205,9 +280,9 @@ describe("renderReview — conflict variant", () => {
     });
   }
 
-  it("renders amber #f0a030 banner", () => {
+  it("renders amber #e2b35a banner", () => {
     const html = renderReview(conflictCard(), conflictParsed());
-    expect(html).toContain("#f0a030");
+    expect(html).toContain("#e2b35a");
   });
 
   it("renders a conflict banner containing the word 'conflict'", () => {
@@ -254,6 +329,46 @@ describe("renderReview — conflict variant", () => {
     const html = renderReview(conflictCard(), conflictParsed());
     expect(html).toContain('data-stretch="true"');
   });
+
+  it("renders the prototype conflict control bar with Keep ours / Keep theirs / Edit", () => {
+    const html = renderReview(conflictCard(), conflictParsed());
+    expect(html).toContain("rv-conflict-bar");
+    expect(html).toContain("Keep ours");
+    expect(html).toContain("Keep theirs");
+    expect(html).toContain('data-action="keep-ours"');
+    expect(html).toContain('data-action="keep-theirs"');
+  });
+
+  it("conflict primary action label reads 'Resolve and merge'", () => {
+    const html = renderReview(conflictCard(), conflictParsed());
+    expect(html).toContain("Resolve and merge");
+  });
+
+  it("conflict decision bar drops the extra 'Resolve in Editor' button (prototype 1107)", () => {
+    const html = renderReview(conflictCard(), conflictParsed());
+    const footer = html.slice(html.indexOf("<footer"), html.indexOf("</footer>"));
+    // The footer aligns to the prototype: no "Resolve in Editor" secondary button.
+    expect(footer).not.toContain("Resolve in Editor");
+    // The resolve-conflict hand-off still lives in the conflict control bar (Edit).
+    expect(html).toContain('data-action="resolve-conflict"');
+  });
+
+  it("conflict decision bar contains NO Approve button", () => {
+    const html = renderReview(conflictCard(), conflictParsed());
+    const footer = html.slice(html.indexOf("<footer"), html.indexOf("</footer>"));
+    expect(footer).not.toContain('data-action="approve"');
+    expect(footer).not.toContain(">Approve<");
+    // The conflict primary (Resolve and merge) is unaffected.
+    expect(footer).toContain('data-action="finish-merge"');
+  });
+
+  it("decision footer contains the feedback textarea for sendBack (review-main contract)", () => {
+    const html = renderReview(conflictCard(), conflictParsed());
+    // footer.querySelector("textarea") must find a textarea inside the <footer>.
+    const footer = html.slice(html.indexOf("<footer"), html.indexOf("</footer>"));
+    expect(footer).toContain('data-role="feedback"');
+    expect(footer).toContain("<textarea");
+  });
 });
 
 // ─── Task 4: PR mode and cleanup-failed recovery ──────────────────────────────
@@ -275,9 +390,9 @@ describe("renderReview — PR mode", () => {
     expect(html.toLowerCase()).toContain("pr mode");
   });
 
-  it("PR mode pill uses muted color #6a6a6a", () => {
+  it("PR mode pill uses muted color #83838b", () => {
     const html = renderReview(card(), parsed(), { prMode: true });
-    expect(html).toContain("#6a6a6a");
+    expect(html).toContain("#83838b");
   });
 
   it("pr-created state renders terminal note about pull request opened and branch kept", () => {
@@ -300,10 +415,10 @@ describe("renderReview — merge-cleanup-failed recovery", () => {
     });
   }
 
-  it("renders amber #f0a030 recovery banner (NOT red #e05050 border)", () => {
+  it("renders amber #e2b35a recovery banner (NOT salmon #f0848c border)", () => {
     const html = renderReview(failedCard(), parsed());
-    expect(html).toContain("#f0a030");
-    // Must not use e05050 as a *border* color for this recovery state
+    expect(html).toContain("#e2b35a");
+    // Must not use the danger salmon as a *border* color for this recovery state
     // (We assert the amber banner is present and the cleanup error message)
   });
 
@@ -341,5 +456,75 @@ describe("renderReview — merge-cleanup-failed recovery", () => {
   it("without retainBranch: copy reads 'branch cleaned up'", () => {
     const html = renderReview(failedCard(), parsed(), { retainBranch: false });
     expect(html.toLowerCase()).toContain("branch cleaned up");
+  });
+});
+
+describe("renderReview — status-aware decision bar", () => {
+  it("a stopped run offers Resume + Discard, never Merge", () => {
+    const html = renderReview(card({ state: "stopped" }), parsed());
+    expect(html).toContain('data-action="resume"');
+    expect(html).toContain('data-action="discard"');
+    expect(html).not.toContain('data-action="merge"');
+  });
+
+  it("an errored run offers Discard only, never Merge", () => {
+    const html = renderReview(card({ state: "error", error: "boom" }), parsed());
+    expect(html).toContain('data-action="discard"');
+    expect(html).not.toContain('data-action="merge"');
+  });
+
+  it("an errored run renders its error text in the body (not a blank panel)", () => {
+    const html = renderReview(card({ state: "error", error: "spawn ENOENT" }), parsed());
+    expect(html).toContain("spawn ENOENT");
+  });
+
+  it("escapes the error text in the errored-run body", () => {
+    const html = renderReview(card({ state: "error", error: "<img src=x onerror=alert(1)>" }), parsed());
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("&lt;img");
+  });
+
+  it("a done run with an EMPTY diff (no changes) disables the Merge button", () => {
+    const html = renderReview(card({ id: "agent-1", state: "done", diff: { files: [], patch: "" } }), parsed());
+    expect(html).toContain('data-action="merge" data-id="agent-1" disabled');
+  });
+
+  it("a done run WITH a diff keeps Merge enabled", () => {
+    const html = renderReview(
+      card({ id: "agent-1", state: "done", diff: { files: ["a.ts"], patch: "P" } }),
+      parsed(),
+    );
+    expect(html).toContain('data-action="merge" data-id="agent-1"');
+    expect(html).not.toContain('data-action="merge" data-id="agent-1" disabled');
+  });
+});
+
+// ─── No file changes: honest diff region ─────────────────────────────────────
+
+describe("renderReview — no file changes", () => {
+  it("a done run with zero changed files says 'No file changes' in the body", () => {
+    const html = renderReview(
+      card({ state: "done", diff: { files: [], patch: "" } }),
+      parsed({ files: [], stat: { adds: 0, dels: 0 } }),
+    );
+    expect(html).toContain("No file changes");
+  });
+
+  it("a done run with zero changed files does NOT render a misleading '+0 -0' stat", () => {
+    const html = renderReview(
+      card({ state: "done", diff: { files: [], patch: "" } }),
+      parsed({ files: [], stat: { adds: 0, dels: 0 } }),
+    );
+    expect(html).not.toContain("+0 -0");
+    expect(html).not.toContain("+0 &minus;0");
+  });
+
+  it("still renders the agent summary alongside the 'No file changes' notice", () => {
+    const html = renderReview(
+      card({ state: "done", summary: "Said hello in chat", diff: { files: [], patch: "" } }),
+      parsed({ files: [], stat: { adds: 0, dels: 0 } }),
+    );
+    expect(html).toContain("No file changes");
+    expect(html).toContain("Said hello in chat");
   });
 });

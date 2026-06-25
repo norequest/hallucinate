@@ -1,6 +1,6 @@
 /**
  * Pure presenter for the Discover tab.
- * No vscode imports, no node imports — pure data transformation.
+ * No vscode imports, no node imports: pure data transformation.
  *
  * Consumes DiscoveredItem[] from @maestro/config and emits a DiscoverVM
  * ready for the webview renderer.
@@ -22,6 +22,8 @@ export interface DiscoverCardVM {
   canDispatch: boolean;
   canAdopt: boolean;
   isSkill: boolean;
+  /** True once the user has adopted this item this session; renders the adopted (done) state. */
+  adopted?: boolean;
 }
 
 export type DiscoverGroup = "in-repo" | "plugins" | "instructions" | "marketplace";
@@ -48,12 +50,12 @@ const GROUP_LABELS: Record<DiscoverGroup, string> = {
 
 const SKILL_CHIPS_MAX = 4;
 
-/** The fixed marketplace placeholder — always present, never from real items. */
+/** The fixed marketplace placeholder, always present, never from real items. */
 const MARKETPLACE_PLACEHOLDER: DiscoverCardVM = {
   id: "__marketplace__",
-  name: "Browse Marketplace",
+  name: "Marketplace",
   description: "Find more agents and skills in the GitHub Copilot Marketplace.",
-  sourceBadge: "Marketplace",
+  sourceBadge: "Soon",
   engineId: "copilot",
   confidence: "verified",
   skillChips: [],
@@ -102,14 +104,18 @@ function deriveSourceBadge(item: DiscoveredItem): string {
 /**
  * Map a DiscoveredItem to a DiscoverCardVM.
  */
-function toCard(item: DiscoveredItem): DiscoverCardVM {
+function toCard(item: DiscoveredItem, adoptedSet: Set<string>): DiscoverCardVM {
   const chips = item.declaredTools.slice(0, SKILL_CHIPS_MAX);
   const overflow = Math.max(0, item.declaredTools.length - SKILL_CHIPS_MAX);
+
+  // Collapse multi-line raw bodies into a clean single-line summary so the
+  // 2-line CSS clamp in the card reads cleanly (presentation normalization).
+  const description = item.description.replace(/\s+/g, " ").trim();
 
   return {
     id: item.source,
     name: item.name,
-    description: item.description,
+    description,
     sourceBadge: deriveSourceBadge(item),
     engineId: deriveEngineId(item),
     confidence: item.confidence,
@@ -118,6 +124,7 @@ function toCard(item: DiscoveredItem): DiscoverCardVM {
     canDispatch: item.confidence === "verified",
     canAdopt: item.confidence !== "instructions",
     isSkill: item.isSkill,
+    adopted: adoptedSet.has(item.source),
   };
 }
 
@@ -161,8 +168,11 @@ export function selectDiscover(
   filter: string,
   activeChip: DiscoverGroup | "all",
   scanning: boolean,
-  scanError?: string
+  scanError?: string,
+  adoptedSources: string[] = []
 ): DiscoverVM {
+  const adoptedSet = new Set(adoptedSources);
+
   // ── 1. Bucket items into groups
   const buckets: Record<"in-repo" | "plugins" | "instructions", DiscoverCardVM[]> = {
     "in-repo": [],
@@ -172,13 +182,13 @@ export function selectDiscover(
 
   for (const item of items) {
     const group = classifyGroup(item);
-    buckets[group].push(toCard(item));
+    buckets[group].push(toCard(item, adoptedSet));
   }
 
   // ── 2. Apply text filter to each real bucket
   const filterFn = (card: DiscoverCardVM) => matchesFilter(card, filter);
 
-  // ── 3. Apply group chip filter (activeChip) — marketplace always included
+  // ── 3. Apply group chip filter (activeChip), marketplace always included
   const groupOrder: Array<"in-repo" | "plugins" | "instructions"> = [
     "in-repo",
     "plugins",
@@ -201,7 +211,7 @@ export function selectDiscover(
     };
   });
 
-  // ── 4. Marketplace group — always exactly one placeholder
+  // ── 4. Marketplace group, always exactly one placeholder
   const marketplaceGroup = {
     group: "marketplace" as DiscoverGroup,
     label: GROUP_LABELS["marketplace"],

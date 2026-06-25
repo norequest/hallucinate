@@ -5,8 +5,9 @@ import { laneFor, type Lane } from "../src/lane.js";
 const EXPECTED: Record<AgentState, Lane> = {
   preparing: "working", working: "working",
   "awaiting-approval": "needsYou", error: "needsYou", detached: "needsYou", "merge-cleanup-failed": "needsYou",
+  stopped: "needsYou",
   conflict: "conflict",
-  done: "done", stopped: "done", merged: "done", discarded: "done", "pr-created": "done",
+  done: "done", merged: "done", discarded: "done", "pr-created": "done",
 };
 
 describe("laneFor", () => {

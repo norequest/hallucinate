@@ -9,3 +9,4 @@ export type { PluginDiscoverResult } from "./plugins.js";
 export { discoverPlugins } from "./plugins.js";
 export type { FsScanner, DiscoverResult } from "./scanner.js";
 export { discoverWorkspace } from "./scanner.js";
+export { dedupeDiscoveredAgents } from "./dedupe.js";

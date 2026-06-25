@@ -73,6 +73,12 @@ async function buildVM(
     return { name, allowedTools: req?.allowedTools, gap };
   });
 
+  // Known skills NOT currently attached, for the "+ Add skill" picker.
+  const attached = new Set(role.skills ?? []);
+  const availableSkills = skillReqs
+    .filter((s) => !attached.has(s.name))
+    .map((s) => ({ name: s.name, ...(s.allowedTools !== undefined ? { allowedTools: s.allowedTools } : {}) }));
+
   const vm: AnatomyVM = {
     roleName: role.name,
     instructions: role.instructions,
@@ -84,6 +90,7 @@ async function buildVM(
     tools: role.tools,
     toolsSummary,
     skills,
+    availableSkills,
   };
 
   return vm;
@@ -212,6 +219,30 @@ export function createAnatomyController(
           await gw.writeRole(updated);
         }
 
+        currentRoleName = msg.roleName;
+        await reload();
+        return;
+      }
+
+      case "role-attach-skill": {
+        const role = await gw.loadRole(msg.roleName);
+        if (!role) return;
+        const existing = role.skills ?? [];
+        // Dedup-append: only add the skill if it is not already attached.
+        const next = existing.includes(msg.skillName)
+          ? existing
+          : [...existing, msg.skillName];
+        await gw.writeRole({ ...role, skills: next });
+        currentRoleName = msg.roleName;
+        await reload();
+        return;
+      }
+
+      case "role-detach-skill": {
+        const role = await gw.loadRole(msg.roleName);
+        if (!role) return;
+        const next = (role.skills ?? []).filter((s) => s !== msg.skillName);
+        await gw.writeRole({ ...role, skills: next });
         currentRoleName = msg.roleName;
         await reload();
         return;

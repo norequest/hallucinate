@@ -1,8 +1,9 @@
 import * as nodePath from "node:path";
 import { parseRoleYaml, parseTeamYaml, parseConfigYaml } from "./parser.js";
-import type { Role, Team, OrchestratorConfig } from "@maestro/core";
-import type { ValidationWarning } from "./types.js";
+import type { Role, Team } from "@maestro/core";
+import type { ValidationWarning, MaestroConfig } from "./types.js";
 import { loadSoul } from "./souls.js";
+import { loadSkills } from "./skill-loader.js";
 
 /** Minimal async fs interface; injectable for offline testing. */
 export interface FsReader {
@@ -19,12 +20,12 @@ export interface FsReader {
 export interface LoadResult {
   roles: Role[];
   teams: Team[];
-  config: OrchestratorConfig;
+  config: MaestroConfig;
   warnings: Array<{ source: string; warnings: ValidationWarning[] }>;
   errors: Array<{ source: string; errors: string[] }>;
 }
 
-export const DEFAULT_CONFIG: OrchestratorConfig = { maxParallelAgents: 3 };
+export const DEFAULT_CONFIG: MaestroConfig = { maxParallelAgents: 3 };
 
 export async function loadConductorDir(
   workspaceRoot: string,
@@ -107,11 +108,19 @@ export async function loadConductorDir(
     }
   }
 
+  // Resolve the loaded skill name set so the config validator can warn on
+  // default skill names (defaults.skills / defaults.leadSkills) that do not
+  // resolve, mirroring the role/team reference-by-name warning style. Skill
+  // load errors here are non-fatal for config: an empty set just means every
+  // referenced default skill warns, which is the safe, best-effort behavior.
+  const skillLoad = await loadSkills(workspaceRoot, fs);
+  const knownSkills = new Set<string>(skillLoad.skills.map((s) => s.name));
+
   // Load orchestrator config.
   if (await fs.exists(configPath)) {
     try {
       const text = await fs.readFile(configPath);
-      const parsed = parseConfigYaml(text, ".conductor/config.yaml");
+      const parsed = parseConfigYaml(text, ".conductor/config.yaml", knownSkills);
       if (parsed.config.ok) {
         result.config = parsed.config.value;
         if (parsed.config.warnings.length > 0) {

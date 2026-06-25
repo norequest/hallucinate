@@ -1,6 +1,6 @@
 import { stateNeedsAttention, countGrants, type Agent, type OrchestratorEvent } from "@maestro/core";
-import { laneFor } from "./lane.js";
-import type { CardVM } from "./protocol.js";
+import { laneFor, isResolvedState } from "./lane.js";
+import type { CardVM, DelegationVM } from "./protocol.js";
 
 /** Max accumulated output chars kept per agent (keeps state snapshots bounded). */
 export const OUTPUT_CAP = 16_000;
@@ -9,10 +9,12 @@ export const OUTPUT_CAP = 16_000;
 export interface CockpitModel {
   cards: Map<string, CardVM>;
   focusedId?: string;
+  /** Pending delegation proposals keyed by id, in insertion (arrival) order. */
+  delegations: Map<string, DelegationVM>;
 }
 
 export function initialModel(): CockpitModel {
-  return { cards: new Map() };
+  return { cards: new Map(), delegations: new Map() };
 }
 
 function diffStatFromPatch(patch: string): { adds: number; dels: number } {
@@ -44,6 +46,7 @@ function cardFromAgent(agent: Agent, prevOutput: string, prevStartedAt: number |
     attention: stateNeedsAttention(agent.state),
     lane: laneFor(agent.state),
     taskDescription: agent.task.description,
+    instructions: agent.role.instructions,
     goal: agent.task.goal,
     diffStat: agent.diff ? diffStatFromPatch(agent.diff.patch) : undefined,
     startedAt,
@@ -51,6 +54,8 @@ function cardFromAgent(agent: Agent, prevOutput: string, prevStartedAt: number |
     toolsCount: grants.granted,
     toolsCanWrite: grants.canWrite,
     skills: agent.role.skills ?? [],
+    parentId: agent.parentId,
+    virtual: agent.virtual,
   };
 }
 
@@ -62,12 +67,28 @@ function appendOutput(prev: string, text: string): string {
 /** Pure: fold one orchestrator event into a new model (never mutates the input). */
 export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitModel {
   const cards = new Map(model.cards);
+  const delegations = new Map(model.delegations);
+  let focusedId = model.focusedId;
   switch (event.kind) {
     case "agent-added":
-      cards.set(event.agent.id, cardFromAgent(event.agent, "", undefined));
+      // Defensively skip an agent added already resolved (rehydrate/edge cases):
+      // a committed outcome (merged/discarded/pr-created) gets no card.
+      if (isResolvedState(event.agent.state)) {
+        cards.delete(event.agent.id);
+        if (focusedId === event.agent.id) focusedId = undefined;
+      } else {
+        cards.set(event.agent.id, cardFromAgent(event.agent, "", undefined));
+      }
       break;
     case "agent-updated": {
       // agent-added always precedes agent-updated per the orchestrator contract.
+      // A resolved card auto-leaves the board: delete it instead of updating,
+      // and drop the drawer focus if it pointed at this card.
+      if (isResolvedState(event.agent.state)) {
+        cards.delete(event.agent.id);
+        if (focusedId === event.agent.id) focusedId = undefined;
+        break;
+      }
       const prev = cards.get(event.agent.id);
       cards.set(event.agent.id, cardFromAgent(event.agent, prev?.output ?? "", prev?.startedAt));
       break;
@@ -79,8 +100,17 @@ export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitMo
       }
       break;
     }
+    case "delegation-proposed": {
+      const { id, leadAgentId, roleName, task } = event.proposal;
+      delegations.set(id, { id, leadAgentId, roleName, task });
+      break;
+    }
+    case "delegation-resolved":
+      // Approved or denied, the proposal leaves the pending list either way.
+      delegations.delete(event.proposal.id);
+      break;
   }
-  return { ...model, cards };
+  return { ...model, cards, delegations, focusedId };
 }
 
 /** Pure: set the focused agent. */

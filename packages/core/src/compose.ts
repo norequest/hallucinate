@@ -1,12 +1,12 @@
-import type { SoulDoc } from "./types.js";
+import type { SkillRef, SoulDoc } from "./types.js";
 
 export interface PreambleParts {
   soul?: SoulDoc;
   instructions: string;
   /** Rendered tool lines; empty string means the Tools section is omitted. */
   tools?: string;
-  /** Resolved SKILL.md bodies in attach order; empty array means omitted. */
-  skills?: string[];
+  /** Skills advertised by name (bodies are materialized as files, not inlined); empty array means omitted. */
+  skills?: SkillRef[];
   task: string;
   /** Optional team-charter red lines unioned in (tighten-only). */
   redLineOverlay?: string;
@@ -75,8 +75,10 @@ export function composePreamble(parts: PreambleParts): string {
   }
 
   if (parts.skills && parts.skills.length > 0) {
-    const skillBodies = parts.skills.map((s) => s.trim()).join("\n\n");
-    blocks.push(`# Skills (standing procedures)\n${skillBodies}`);
+    const lines = parts.skills.map((s) =>
+      s.description ? `- ${s.name}: ${s.description}` : `- ${s.name}`,
+    );
+    blocks.push(`# Skills (available, load when relevant)\n${lines.join("\n")}`);
   }
 
   // The Task block is omitted when the task is empty, so a caller that wants the

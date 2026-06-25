@@ -231,6 +231,35 @@ describe("AcpSession", () => {
     expect(redLineIdx).toBeLessThan(instrIdx);
   });
 
+  it("systemPrompt advertises skills as a pointer block, not inlining the body", () => {
+    const transport = new FakeAcpTransport();
+    const session = new AcpSession(transport, {
+      instructions: "be helpful",
+      model: undefined,
+      autonomy: "yolo",
+      skills: [
+        {
+          name: "task-coordination",
+          description: "coordinate parallel tasks",
+          content: "# task-coordination\nINLINE_SKILL_BODY do the secret handshake",
+        },
+      ],
+    });
+
+    session.start({ id: "t1", description: "add caching", roleName: "R" });
+
+    const initFrame = transport.sent[0]!;
+    const systemPrompt = (initFrame.params as Record<string, unknown>)?.["systemPrompt"] as string;
+
+    // The new pointer header advertises the skill by name + description.
+    expect(systemPrompt).toContain("# Skills (available, load when relevant)");
+    expect(systemPrompt).toContain("- task-coordination: coordinate parallel tasks");
+    // The old inlined header must NOT appear.
+    expect(systemPrompt).not.toContain("# Skills (standing procedures)");
+    // The skill BODY must NOT be inlined into the systemPrompt.
+    expect(systemPrompt).not.toContain("INLINE_SKILL_BODY");
+  });
+
   it("first user_turn carries the task description", () => {
     const transport = new FakeAcpTransport();
     const session = new AcpSession(transport, {

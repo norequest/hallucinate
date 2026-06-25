@@ -102,8 +102,9 @@ describe("CopilotAdapter", () => {
     fake.child()!.out("edited cache.ts\n");
     fake.child()!.close(0);
 
+    // The line's terminating newline is preserved on the output event.
     expect(await events).toEqual([
-      { kind: "output", text: "edited cache.ts" },
+      { kind: "output", text: "edited cache.ts\n" },
       { kind: "done", summary: "edited cache.ts" },
     ]);
   });

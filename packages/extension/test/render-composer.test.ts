@@ -26,6 +26,28 @@ describe("renderComposerHTML", () => {
     expect(html).toContain('data-action="dispatch"');
     expect(html).toContain('data-action="new-role"');
   });
+  it("titles the modal 'Dispatch a new agent' with the Working-lane subtitle and a brand mark", () => {
+    const html = renderComposerHTML(opts);
+    expect(html).toContain("Dispatch a new agent");
+    expect(html).not.toContain(">New Agent<");
+    expect(html).toContain("Joins the Working lane on branch");
+    expect(html).toContain("composer-eq--brand");
+  });
+  it("renders compact role chips (single-line: role + engine, no multi-line snippet block)", () => {
+    const html = renderComposerHTML(opts);
+    expect(html).toContain('class="chip-role"');
+    expect(html).toContain('class="chip-engine"');
+    expect(html).not.toContain('class="chip-snippet"');
+  });
+  it("renders a Cancel button in the footer that reuses close-composer, plus an accent mark on Dispatch", () => {
+    const html = renderComposerHTML(opts);
+    expect(html).toContain('class="composer-cancel"');
+    expect(html).toContain(">Cancel<");
+    // The Cancel button reuses the existing modal-close action (no new verb).
+    const closes = html.match(/data-action="close-composer"/g) ?? [];
+    expect(closes.length).toBeGreaterThanOrEqual(2);
+    expect(html).toContain("composer-eq--accent");
+  });
   it("escapes role names and instruction snippets (no markup injection)", () => {
     const evil = composerOptions(
       [{ name: "<img src=x>", instructions: "<script>alert(1)</script>", engine: { id: "copilot" }, autonomy: "manual" }],

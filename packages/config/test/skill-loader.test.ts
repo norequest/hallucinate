@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { loadSkills } from "../src/skill-loader.js";
+import { serializeSkill } from "../src/serializer.js";
+import { TASK_COORDINATION_STRATEGIES_SKILL } from "../src/vendored-skills.js";
 import type { FsReader } from "../src/loader.js";
 
 /**
@@ -56,7 +58,10 @@ function makeFakeFs(
 }
 
 const ROOT = "/repo";
-const SKILLS_DIR = `${ROOT}/.conductor/skills`;
+// PRIMARY skills home: the folder VS Code and Copilot read.
+const SKILLS_DIR = `${ROOT}/.github/skills`;
+// LEGACY skills home: still READ for back-compat (never written anymore).
+const LEGACY_SKILLS_DIR = `${ROOT}/.conductor/skills`;
 
 const RUN_TESTS_MD = `---
 name: run-tests
@@ -74,7 +79,7 @@ Run pnpm test and report failures.
 const MALFORMED_MD = `no frontmatter at all, just text`;
 
 describe("loadSkills", () => {
-  it("returns empty skills and no errors when .conductor/skills does not exist", async () => {
+  it("returns empty skills and no errors when neither skills directory exists", async () => {
     const fs = makeFakeFs({});
     const result = await loadSkills(ROOT, fs);
     expect(result.skills).toHaveLength(0);
@@ -99,6 +104,49 @@ describe("loadSkills", () => {
     const result = await loadSkills(ROOT, fs);
     expect(result.bodies.has("run-tests")).toBe(true);
     expect(result.bodies.get("run-tests")).toContain("pnpm test");
+  });
+
+  it("stores details with the verbatim raw SKILL.md text and the frontmatter description", async () => {
+    const fs = makeFakeFs({
+      [`${SKILLS_DIR}/run-tests/SKILL.md`]: RUN_TESTS_MD,
+    });
+    const result = await loadSkills(ROOT, fs);
+
+    const detail = result.details.get("run-tests");
+    expect(detail).toBeDefined();
+    // raw must be the exact on-disk bytes, frontmatter and body included.
+    expect(detail!.raw).toBe(RUN_TESTS_MD);
+    expect(detail!.description).toBe("Runs the project test suite.");
+  });
+
+  it("round-trips a scaffolded vendored skill: details.raw equals the written file and details.description matches", async () => {
+    // The scaffolder writes serializeSkill(manifest, body) to disk; load that
+    // exact text back and confirm details exposes it verbatim.
+    const written = serializeSkill(
+      TASK_COORDINATION_STRATEGIES_SKILL.manifest,
+      TASK_COORDINATION_STRATEGIES_SKILL.body,
+    );
+    const fs = makeFakeFs({
+      [`${SKILLS_DIR}/task-coordination-strategies/SKILL.md`]: written,
+    });
+    const result = await loadSkills(ROOT, fs);
+
+    const detail = result.details.get("task-coordination-strategies");
+    expect(detail).toBeDefined();
+    expect(detail!.raw).toBe(written);
+    expect(detail!.description).toBe(TASK_COORDINATION_STRATEGIES_SKILL.manifest.description);
+  });
+
+  it("keys details the same as bodies (only successfully parsed skills appear)", async () => {
+    const fs = makeFakeFs({
+      [`${SKILLS_DIR}/run-tests/SKILL.md`]: RUN_TESTS_MD,
+      [`${SKILLS_DIR}/bad-skill/SKILL.md`]: MALFORMED_MD,
+    });
+    const result = await loadSkills(ROOT, fs);
+
+    expect([...result.details.keys()].sort()).toEqual([...result.bodies.keys()].sort());
+    expect(result.details.has("run-tests")).toBe(true);
+    expect(result.details.has("bad-skill")).toBe(false);
   });
 
   it("collects an error for a malformed SKILL.md and does not throw", async () => {
@@ -144,5 +192,99 @@ Generate the spec.
     const result = await loadSkills(ROOT, fs);
     expect(result.skills).toHaveLength(2);
     expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it("reads a skill placed in the primary .github/skills home", async () => {
+    const fs = makeFakeFs({
+      [`${SKILLS_DIR}/run-tests/SKILL.md`]: RUN_TESTS_MD,
+    });
+    const result = await loadSkills(ROOT, fs);
+    expect(result.skills.map((s) => s.name)).toEqual(["run-tests"]);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("reads a skill placed only in legacy .conductor/skills (back-compat)", async () => {
+    const fs = makeFakeFs({
+      [`${LEGACY_SKILLS_DIR}/legacy-only/SKILL.md`]: `---
+name: legacy-only
+description: Lives only in the old home.
+---
+
+Legacy body.
+`,
+    });
+    const result = await loadSkills(ROOT, fs);
+    expect(result.skills.map((s) => s.name)).toEqual(["legacy-only"]);
+    expect(result.bodies.get("legacy-only")).toContain("Legacy body.");
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("merges skills from both homes by name", async () => {
+    const openapi_md = `---
+name: openapi
+description: Generates an OpenAPI spec.
+---
+
+Generate the spec.
+`;
+    const fs = makeFakeFs({
+      [`${SKILLS_DIR}/run-tests/SKILL.md`]: RUN_TESTS_MD,
+      [`${LEGACY_SKILLS_DIR}/openapi/SKILL.md`]: openapi_md,
+    });
+    const result = await loadSkills(ROOT, fs);
+    expect(result.skills.map((s) => s.name).sort()).toEqual(["openapi", "run-tests"]);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("when the SAME name exists in both homes, the .github version wins", async () => {
+    const githubVersion = `---
+name: shared
+description: GitHub home wins.
+allowed-tools:
+  - Run
+---
+
+GITHUB BODY
+`;
+    const legacyVersion = `---
+name: shared
+description: Conductor home loses.
+allowed-tools:
+  - Git
+---
+
+LEGACY BODY
+`;
+    const fs = makeFakeFs({
+      [`${SKILLS_DIR}/shared/SKILL.md`]: githubVersion,
+      [`${LEGACY_SKILLS_DIR}/shared/SKILL.md`]: legacyVersion,
+    });
+    const result = await loadSkills(ROOT, fs);
+
+    // Exactly one "shared" skill survives, and it is the .github one.
+    expect(result.skills.filter((s) => s.name === "shared")).toHaveLength(1);
+    const shared = result.skills.find((s) => s.name === "shared");
+    expect(shared?.description).toBe("GitHub home wins.");
+    expect(shared?.allowedTools).toEqual(["Run"]);
+    expect(result.bodies.get("shared")).toContain("GITHUB BODY");
+    expect(result.bodies.get("shared")).not.toContain("LEGACY BODY");
+    const detail = result.details.get("shared");
+    expect(detail?.description).toBe("GitHub home wins.");
+    expect(detail?.raw).toBe(githubVersion);
+  });
+
+  it("accumulates warnings and errors from both homes", async () => {
+    const fs = makeFakeFs({
+      [`${SKILLS_DIR}/good/SKILL.md`]: RUN_TESTS_MD.replace("name: run-tests", "name: good"),
+      [`${SKILLS_DIR}/bad-github/SKILL.md`]: MALFORMED_MD,
+      [`${LEGACY_SKILLS_DIR}/bad-legacy/SKILL.md`]: MALFORMED_MD,
+    });
+    const result = await loadSkills(ROOT, fs);
+    expect(result.skills.map((s) => s.name)).toEqual(["good"]);
+    // One error from each home.
+    expect(result.errors.length).toBe(2);
+    const sources = result.errors.map((e) => e.source);
+    expect(sources.some((s) => s.includes(".github/skills/bad-github"))).toBe(true);
+    expect(sources.some((s) => s.includes(".conductor/skills/bad-legacy"))).toBe(true);
   });
 });

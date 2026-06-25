@@ -160,4 +160,79 @@ describe("reduce", () => {
     expect(c.toolsCanWrite).toBe(0);
     expect(c.skills).toEqual([]);
   });
+
+  it("auto-removes a card from the model when it transitions to merged", () => {
+    let m = reduce(initialModel(), added(agent()));
+    expect(m.cards.has("a1")).toBe(true);
+    m = reduce(m, updated(agent({ state: "merged" })));
+    expect(m.cards.has("a1")).toBe(false);
+  });
+
+  it("auto-removes a card from the model when it transitions to discarded", () => {
+    let m = reduce(initialModel(), added(agent()));
+    m = reduce(m, updated(agent({ state: "discarded" })));
+    expect(m.cards.has("a1")).toBe(false);
+  });
+
+  it("auto-removes a card from the model when it transitions to pr-created", () => {
+    let m = reduce(initialModel(), added(agent()));
+    m = reduce(m, updated(agent({ state: "pr-created" })));
+    expect(m.cards.has("a1")).toBe(false);
+  });
+
+  it("keeps a done (ready-to-review) card: only committed outcomes auto-leave", () => {
+    let m = reduce(initialModel(), added(agent()));
+    m = reduce(m, updated(agent({ state: "done", summary: "ok" })));
+    expect(m.cards.has("a1")).toBe(true);
+    expect(m.cards.get("a1")!.state).toBe("done");
+  });
+
+  it("clears focusedId when the focused card resolves (merged)", () => {
+    let m = reduce(initialModel(), added(agent()));
+    m = setFocus(m, "a1");
+    expect(m.focusedId).toBe("a1");
+    m = reduce(m, updated(agent({ state: "merged" })));
+    expect(m.focusedId).toBeUndefined();
+  });
+
+  it("leaves focusedId on another card untouched when a different card resolves", () => {
+    let m = reduce(initialModel(), added(agent({ id: "a1" })));
+    m = reduce(m, added(agent({ id: "a2" })));
+    m = setFocus(m, "a2");
+    m = reduce(m, updated(agent({ id: "a1", state: "merged" })));
+    expect(m.focusedId).toBe("a2");
+  });
+
+  it("creates no card for an agent added directly in a resolved state (rehydrate guard)", () => {
+    const m = reduce(initialModel(), added(agent({ state: "discarded" })));
+    expect(m.cards.has("a1")).toBe(false);
+    expect(m.cards.size).toBe(0);
+  });
+
+  it("clears focusedId when an agent added directly resolved was the focused id", () => {
+    let m = reduce(initialModel(), added(agent({ id: "a1", state: "working" })));
+    m = setFocus(m, "a1");
+    // A rehydrate replays a1 already resolved: its card must not reappear and focus must drop.
+    m = reduce(m, added(agent({ id: "a1", state: "merged" })));
+    expect(m.cards.has("a1")).toBe(false);
+    expect(m.focusedId).toBeUndefined();
+  });
+
+  it("carries role.instructions onto the card and preserves it across agent-updated (drawer Instructions tab)", () => {
+    const instructions = "# Instructions\nYou are an implementer.\n# Skills\nfoo";
+    const role = { name: "Implementer", instructions, engine: { id: "copilot" }, autonomy: "auto-approve-safe" as const };
+    let m = reduce(initialModel(), added(agent({ role })));
+    expect(m.cards.get("a1")!.instructions).toBe(instructions);
+    // The reducer re-derives card fields from the Agent on update; instructions must survive too.
+    m = reduce(m, updated(agent({ role, state: "working" })));
+    expect(m.cards.get("a1")!.instructions).toBe(instructions);
+  });
+
+  it("maps agent.virtual onto CardVM.virtual (fleet sub-agent), and leaves a plain agent undefined", () => {
+    const v = reduce(initialModel(), added(agent({ id: "sub1", parentId: "lead1", virtual: true }))).cards.get("sub1")!;
+    expect(v.virtual).toBe(true);
+    expect(v.parentId).toBe("lead1");
+    const plain = reduce(initialModel(), added(agent({ id: "p1" }))).cards.get("p1")!;
+    expect(plain.virtual).toBeUndefined();
+  });
 });

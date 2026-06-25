@@ -8,6 +8,10 @@ function fakeGateway(overrides?: Partial<ConfigGateway>): ConfigGateway & {
   savedSkills: Array<{ manifest: { name: string; description: string; allowedTools?: string[] }; body: string }>;
   deletedSkills: string[];
   roleSkillsCalls: Array<{ roleName: string; skills: string[] }>;
+  seededRoles: string[];
+  deletedRoles: string[];
+  writtenTeams: Array<{ name: string; roleNames: string[] }>;
+  deletedTeams: string[];
 } {
   const savedSkills: Array<{
     manifest: { name: string; description: string; allowedTools?: string[] };
@@ -15,6 +19,10 @@ function fakeGateway(overrides?: Partial<ConfigGateway>): ConfigGateway & {
   }> = [];
   const deletedSkills: string[] = [];
   const roleSkillsCalls: Array<{ roleName: string; skills: string[] }> = [];
+  const seededRoles: string[] = [];
+  const deletedRoles: string[] = [];
+  const writtenTeams: Array<{ name: string; roleNames: string[] }> = [];
+  const deletedTeams: string[] = [];
 
   const gw: ConfigGateway = {
     loadSkills: vi.fn(async () => ({
@@ -37,10 +45,30 @@ function fakeGateway(overrides?: Partial<ConfigGateway>): ConfigGateway & {
     setRoleSkills: vi.fn(async (roleName, skills) => {
       roleSkillsCalls.push({ roleName, skills });
     }),
+    seedRole: vi.fn(async (seed) => {
+      seededRoles.push(seed.name);
+    }),
+    deleteRole: vi.fn(async (name) => {
+      deletedRoles.push(name);
+    }),
+    writeTeam: vi.fn(async (team) => {
+      writtenTeams.push(team);
+    }),
+    deleteTeam: vi.fn(async (name) => {
+      deletedTeams.push(name);
+    }),
     ...overrides,
   };
 
-  return Object.assign(gw, { savedSkills, deletedSkills, roleSkillsCalls });
+  return Object.assign(gw, {
+    savedSkills,
+    deletedSkills,
+    roleSkillsCalls,
+    seededRoles,
+    deletedRoles,
+    writtenTeams,
+    deletedTeams,
+  });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,11 +93,11 @@ describe("createLibrary", () => {
     expect(snaps.at(-1)!.skills.length).toBeGreaterThan(0);
   });
 
-  it("the open snapshot has tab 'skills' by default", async () => {
+  it("the open snapshot has tab 'agents' by default", async () => {
     const snaps: LibrarySnapshot[] = [];
     const gw = fakeGateway();
     await openLibrary(gw, snaps);
-    expect(snaps.at(-1)!.tab).toBe("skills");
+    expect(snaps.at(-1)!.tab).toBe("agents");
   });
 
   it("switch-library-tab pushes a snapshot with the new tab", async () => {
@@ -206,5 +234,87 @@ describe("createLibrary", () => {
     // After attach, roles should show the new skill list
     const tester = snap.roles.find((r) => r.name === "Tester");
     expect(tester!.skills).toContain("openapi");
+  });
+
+  // ── Group 1: Agents tab New / Delete ────────────────────────────────────────
+
+  it("new-role seeds a default role then pushes a fresh snapshot on the agents tab", async () => {
+    const snaps: LibrarySnapshot[] = [];
+    const gw = fakeGateway();
+    const lib = await openLibrary(gw, snaps);
+    await lib.handle({ type: "new-role", name: "Reviewer" });
+    expect(gw.seedRole).toHaveBeenCalledWith({ name: "Reviewer" });
+    expect(gw.seededRoles).toEqual(["Reviewer"]);
+    expect(snaps.at(-1)!.tab).toBe("agents");
+  });
+
+  it("delete-role calls gw.deleteRole then reloads on the agents tab", async () => {
+    const snaps: LibrarySnapshot[] = [];
+    const gw = fakeGateway();
+    const lib = await openLibrary(gw, snaps);
+    const before = snaps.length;
+    await lib.handle({ type: "delete-role", name: "Tester" });
+    expect(gw.deleteRole).toHaveBeenCalledWith("Tester");
+    expect(snaps.length).toBeGreaterThan(before);
+    expect(snaps.at(-1)!.tab).toBe("agents");
+  });
+
+  // ── Group 2: Teams tab Create / Save / Delete ───────────────────────────────
+
+  it("team-create opens a blank team editor (editingTeam.name === '') on the teams tab", async () => {
+    const snaps: LibrarySnapshot[] = [];
+    const gw = fakeGateway();
+    const lib = await openLibrary(gw, snaps);
+    await lib.handle({ type: "team-create" });
+    const snap = snaps.at(-1)!;
+    expect(snap.editingTeam).toBeDefined();
+    expect(snap.editingTeam!.name).toBe("");
+    expect(snap.editingTeam!.roleNames).toEqual([]);
+    expect(snap.tab).toBe("teams");
+  });
+
+  it("team-save calls gw.writeTeam with name + roleNames then clears the editor", async () => {
+    const snaps: LibrarySnapshot[] = [];
+    const gw = fakeGateway();
+    const lib = await openLibrary(gw, snaps);
+    await lib.handle({ type: "team-create" });
+    await lib.handle({ type: "team-save", name: "Squad", roleNames: ["Tester"] });
+    expect(gw.writeTeam).toHaveBeenCalledWith({ name: "Squad", roleNames: ["Tester"] });
+    const snap = snaps.at(-1)!;
+    expect(snap.editingTeam).toBeUndefined();
+    expect(snap.tab).toBe("teams");
+  });
+
+  it("team-delete calls gw.deleteTeam then reloads on the teams tab", async () => {
+    const snaps: LibrarySnapshot[] = [];
+    const gw = fakeGateway();
+    const lib = await openLibrary(gw, snaps);
+    await lib.handle({ type: "team-delete", name: "QA Team" });
+    expect(gw.deleteTeam).toHaveBeenCalledWith("QA Team");
+    expect(snaps.at(-1)!.tab).toBe("teams");
+  });
+
+  it("switch-library-tab clears an open team editor", async () => {
+    const snaps: LibrarySnapshot[] = [];
+    const gw = fakeGateway();
+    const lib = await openLibrary(gw, snaps);
+    await lib.handle({ type: "team-create" });
+    expect(snaps.at(-1)!.editingTeam).toBeDefined();
+    await lib.handle({ type: "switch-library-tab", tab: "skills" });
+    expect(snaps.at(-1)!.editingTeam).toBeUndefined();
+  });
+
+  // ── Group 3: launch-team is a no-op in the controller (host intercepts) ──────
+
+  it("launch-team is a no-op in the controller (no gateway calls, host owns it)", async () => {
+    const snaps: LibrarySnapshot[] = [];
+    const gw = fakeGateway();
+    const lib = await openLibrary(gw, snaps);
+    const before = snaps.length;
+    await lib.handle({ type: "launch-team", name: "QA Team" });
+    // No write, no reload: the host intercepts this message before the controller.
+    expect(gw.writeTeam).not.toHaveBeenCalled();
+    expect(gw.deleteTeam).not.toHaveBeenCalled();
+    expect(snaps.length).toBe(before);
   });
 });

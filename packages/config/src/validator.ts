@@ -1,5 +1,6 @@
-import type { Role, Team, OrchestratorConfig, ToolGrant } from "@maestro/core";
-import type { ValidationResult, ValidationWarning } from "./types.js";
+import type { Role, Team, ToolGrant, AgentDefaults } from "@maestro/core";
+import { AUTONOMY_VALUES } from "@maestro/core";
+import type { ValidationResult, ValidationWarning, MaestroConfig } from "./types.js";
 import { KNOWN_ENGINE_IDS } from "./types.js";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -185,7 +186,7 @@ export function validateRole(raw: unknown): ValidationResult<Role> {
   }
 
   const autonomy = raw["autonomy"];
-  const validAutonomy = ["manual", "auto-approve-safe", "yolo"];
+  const validAutonomy: readonly string[] = AUTONOMY_VALUES;
   if (!isString(autonomy) || !validAutonomy.includes(autonomy)) {
     errors.push(`role.autonomy must be one of: ${validAutonomy.join(", ")}`);
   }
@@ -300,6 +301,27 @@ export function validateTeam(
     }
   }
 
+  // Validate the optional lead reference. The lead is a role name and must be
+  // one of the team's DECLARED roles (matched against the raw roles array,
+  // before filtering down to loaded/known roles), so a team can name a lead
+  // whose role file is not loaded yet. Absent lead is valid (no error, no
+  // warning); the orchestrator defaults it to the first role.
+  const rawRoleNames = Array.isArray(raw["roles"])
+    ? (raw["roles"] as unknown[]).filter(isString)
+    : [];
+  let lead: string | undefined;
+  if (raw["lead"] !== undefined) {
+    if (!isString(raw["lead"])) {
+      const teamLabel = isString(raw["name"]) ? raw["name"].trim() : "team";
+      errors.push(`Team "${teamLabel}": lead must be a string if provided`);
+    } else if (!rawRoleNames.includes(raw["lead"])) {
+      const teamLabel = isString(raw["name"]) ? raw["name"].trim() : "team";
+      errors.push(`Team "${teamLabel}": lead "${raw["lead"]}" is not one of its roles`);
+    } else {
+      lead = raw["lead"].trim();
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors, warnings };
   }
@@ -309,12 +331,118 @@ export function validateTeam(
 
   return {
     ok: true,
-    value: { name: (raw["name"] as string).trim(), roles },
+    value: {
+      name: (raw["name"] as string).trim(),
+      roles,
+      ...(lead !== undefined ? { lead } : {}),
+    },
     warnings,
   };
 }
 
-export function validateOrchestratorConfig(raw: unknown): ValidationResult<OrchestratorConfig> {
+/**
+ * Coerce a raw value into a string array, keeping only string entries.
+ * Non-string entries are skipped (defensive, tolerant of bad shapes); a
+ * non-array value yields an empty array. Mirrors how the parser tolerates
+ * malformed lists elsewhere rather than hard-failing.
+ */
+function coerceStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isString);
+}
+
+/**
+ * Parse the optional top-level `defaults` mapping into an `AgentDefaults`.
+ * Tolerant by design: a non-object `defaults`, a non-string `instructions`,
+ * or non-array `skills`/`leadSkills` are simply ignored (with a warning),
+ * rather than failing the whole config load. Returns `undefined` when no
+ * usable defaults are present, so an absent/empty block leaves spawn behavior
+ * identical to today (back-compat).
+ */
+function parseDefaults(
+  raw: unknown,
+  warnings: ValidationWarning[],
+): AgentDefaults | undefined {
+  if (!isRecord(raw)) {
+    warnings.push({
+      field: "defaults",
+      message: "config.defaults must be a mapping; ignoring it",
+    });
+    return undefined;
+  }
+
+  const out: AgentDefaults = {};
+
+  if (raw["instructions"] !== undefined) {
+    if (isString(raw["instructions"])) {
+      // Keep the value verbatim (empty string included): an empty starter
+      // instructions is the documented default and round-trips faithfully.
+      out.instructions = raw["instructions"];
+    } else {
+      warnings.push({
+        field: "defaults.instructions",
+        message: "config.defaults.instructions must be a string; ignoring it",
+      });
+    }
+  }
+
+  if (raw["skills"] !== undefined) {
+    if (Array.isArray(raw["skills"])) {
+      const skills = coerceStringArray(raw["skills"]);
+      if (skills.length !== raw["skills"].length) {
+        warnings.push({
+          field: "defaults.skills",
+          message: "config.defaults.skills entries must be strings; non-string entries were skipped",
+        });
+      }
+      out.skills = skills;
+    } else {
+      warnings.push({
+        field: "defaults.skills",
+        message: "config.defaults.skills must be an array of strings; ignoring it",
+      });
+    }
+  }
+
+  if (raw["leadSkills"] !== undefined) {
+    if (Array.isArray(raw["leadSkills"])) {
+      const leadSkills = coerceStringArray(raw["leadSkills"]);
+      if (leadSkills.length !== raw["leadSkills"].length) {
+        warnings.push({
+          field: "defaults.leadSkills",
+          message: "config.defaults.leadSkills entries must be strings; non-string entries were skipped",
+        });
+      }
+      out.leadSkills = leadSkills;
+    } else {
+      warnings.push({
+        field: "defaults.leadSkills",
+        message: "config.defaults.leadSkills must be an array of strings; ignoring it",
+      });
+    }
+  }
+
+  // Nothing usable parsed out -> behave as if defaults were absent.
+  if (out.instructions === undefined && out.skills === undefined && out.leadSkills === undefined) {
+    return undefined;
+  }
+  return out;
+}
+
+/**
+ * Validate the orchestrator config (`.conductor/config.yaml`).
+ *
+ * `knownSkills`, when provided, is the set of skill names that loaded
+ * successfully. Default skill names (in `defaults.skills` / `defaults.leadSkills`)
+ * that are not in this set produce a WARNING (not an error), mirroring how
+ * `validateTeam` warns on an unresolved role reference. When `knownSkills` is
+ * omitted the check is skipped (best-effort): the parser has no skill set in
+ * scope, so the warning is raised by the loader after skills are resolved.
+ */
+export function validateOrchestratorConfig(
+  raw: unknown,
+  knownSkills?: ReadonlySet<string>,
+): ValidationResult<MaestroConfig> {
   const errors: string[] = [];
   const warnings: ValidationWarning[] = [];
 
@@ -329,6 +457,31 @@ export function validateOrchestratorConfig(raw: unknown): ValidationResult<Orche
     }
   }
 
+  let defaults: AgentDefaults | undefined;
+  if (raw["defaults"] !== undefined) {
+    defaults = parseDefaults(raw["defaults"], warnings);
+    // Warn on default skill names that do not resolve, when a skill set is in
+    // scope. Best-effort: skipped entirely when knownSkills is omitted.
+    if (defaults !== undefined && knownSkills !== undefined) {
+      for (const name of defaults.skills ?? []) {
+        if (!knownSkills.has(name)) {
+          warnings.push({
+            field: "defaults.skills",
+            message: `default skill "${name}" is not a loaded skill; the skill file may not exist yet`,
+          });
+        }
+      }
+      for (const name of defaults.leadSkills ?? []) {
+        if (!knownSkills.has(name)) {
+          warnings.push({
+            field: "defaults.leadSkills",
+            message: `default lead skill "${name}" is not a loaded skill; the skill file may not exist yet`,
+          });
+        }
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors, warnings };
   }
@@ -337,6 +490,7 @@ export function validateOrchestratorConfig(raw: unknown): ValidationResult<Orche
     ok: true,
     value: {
       maxParallelAgents: isNumber(max) ? max : 3,
+      ...(defaults !== undefined ? { defaults } : {}),
     },
     warnings,
   };

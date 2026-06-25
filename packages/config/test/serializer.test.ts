@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { serializeRole, serializeTeam, serializeSkill } from "../src/serializer.js";
-import { parseRoleYaml, parseTeamYaml } from "../src/parser.js";
+import { serializeRole, serializeTeam, serializeSkill, serializeConfig } from "../src/serializer.js";
+import { parseRoleYaml, parseTeamYaml, parseConfigYaml } from "../src/parser.js";
 import { parseSkillMarkdown } from "../src/skill-parser.js";
 import type { Role, Team } from "@maestro/core";
+import type { MaestroConfig } from "../src/types.js";
 
 const implementer: Role = {
   name: "Implementer",
@@ -167,12 +168,13 @@ describe("serializeSkill", () => {
 });
 
 describe("serializeTeam", () => {
+  const knownRoles = new Map<string, Role>([
+    [implementer.name, implementer],
+    [reviewer.name, reviewer],
+  ]);
+
   it("produces YAML that round-trips back to an equivalent Team", () => {
     const yaml = serializeTeam(team);
-    const knownRoles = new Map<string, Role>([
-      [implementer.name, implementer],
-      [reviewer.name, reviewer],
-    ]);
     const parsed = parseTeamYaml(yaml, "test", knownRoles);
     expect(parsed.team.ok).toBe(true);
     if (parsed.team.ok) {
@@ -181,6 +183,70 @@ describe("serializeTeam", () => {
         implementer.name,
         reviewer.name,
       ]);
+    }
+  });
+
+  it("includes lead when set and round-trips it through parseTeamYaml", () => {
+    const withLead: Team = { ...team, lead: reviewer.name };
+    const yaml = serializeTeam(withLead);
+    expect(yaml).toContain(`lead: ${reviewer.name}`);
+    const parsed = parseTeamYaml(yaml, "test", knownRoles);
+    expect(parsed.team.ok).toBe(true);
+    if (parsed.team.ok) {
+      expect(parsed.team.value.lead).toBe(reviewer.name);
+    }
+  });
+
+  it("omits lead when absent (existing team files unchanged)", () => {
+    const yaml = serializeTeam(team);
+    expect(yaml).not.toContain("lead:");
+    const parsed = parseTeamYaml(yaml, "test", knownRoles);
+    expect(parsed.team.ok).toBe(true);
+    if (parsed.team.ok) {
+      expect(parsed.team.value.lead).toBeUndefined();
+    }
+  });
+});
+
+describe("serializeConfig defaults round-trip", () => {
+  it("round-trips a populated defaults block through parseConfigYaml (deep-equals)", () => {
+    const config: MaestroConfig = {
+      maxParallelAgents: 4,
+      defaults: {
+        instructions: "Always run the linter.",
+        skills: ["run-tests"],
+        leadSkills: ["task-coordination-strategies"],
+      },
+    };
+    const yaml = serializeConfig(config);
+    expect(yaml).toContain("defaults:");
+    const parsed = parseConfigYaml(yaml, "test");
+    expect(parsed.config.ok).toBe(true);
+    if (parsed.config.ok) {
+      expect(parsed.config.value).toEqual(config);
+    }
+  });
+
+  it("round-trips an empty-string instructions and empty skills array", () => {
+    const config: MaestroConfig = {
+      maxParallelAgents: 3,
+      defaults: { instructions: "", skills: [], leadSkills: ["task-coordination-strategies"] },
+    };
+    const yaml = serializeConfig(config);
+    const parsed = parseConfigYaml(yaml, "test");
+    expect(parsed.config.ok).toBe(true);
+    if (parsed.config.ok) {
+      expect(parsed.config.value).toEqual(config);
+    }
+  });
+
+  it("omits the defaults block when absent (existing config files unchanged)", () => {
+    const yaml = serializeConfig({ maxParallelAgents: 3 });
+    expect(yaml).not.toContain("defaults:");
+    const parsed = parseConfigYaml(yaml, "test");
+    expect(parsed.config.ok).toBe(true);
+    if (parsed.config.ok) {
+      expect(parsed.config.value.defaults).toBeUndefined();
     }
   });
 });

@@ -1,8 +1,22 @@
 import * as nodePath from "node:path";
 import type { FsReader } from "./loader.js";
+import { SKILLS_DIR_SEGMENTS, LEGACY_SKILLS_DIR_SEGMENTS } from "./paths.js";
 import type { SkillManifest } from "./skill-types.js";
 import { parseSkillMarkdown } from "./skill-parser.js";
 import type { ValidationWarning } from "./types.js";
+
+/**
+ * Per-skill extras the extension resolver needs to advertise a skill by name
+ * and materialize its file on demand: the one-line frontmatter description (may
+ * be undefined) and the full RAW SKILL.md text exactly as read from disk
+ * (frontmatter plus body).
+ */
+export interface SkillDetail {
+  /** The frontmatter description, as parsed. Undefined when none was declared. */
+  description?: string;
+  /** The full SKILL.md text exactly as read from disk (frontmatter + body). */
+  raw: string;
+}
 
 export interface SkillLoadResult {
   /** Successfully parsed skill manifests. */
@@ -13,6 +27,13 @@ export interface SkillLoadResult {
    * are represented here.
    */
   bodies: Map<string, string>;
+  /**
+   * Map from skill name to its description and raw on-disk SKILL.md text. Keyed
+   * the same way as `bodies` (only successfully parsed manifests appear). Used
+   * by the extension resolver to advertise a skill by name and materialize its
+   * original file verbatim.
+   */
+  details: Map<string, SkillDetail>;
   /** Non-fatal warnings (e.g. an allowed-tools value that was coerced). */
   warnings: Array<{ source: string; warnings: ValidationWarning[] }>;
   /** Parse or read errors (never throws; all failures are collected here). */
@@ -20,12 +41,18 @@ export interface SkillLoadResult {
 }
 
 /**
- * Loads all skills from `.conductor/skills/<name>/SKILL.md` under the given
- * workspace root.
+ * Loads all skills from BOTH skills homes under the given workspace root:
+ *   - `.github/skills/<name>/SKILL.md` (PRIMARY: the folder VS Code and
+ *     Copilot read), and
+ *   - `.conductor/skills/<name>/SKILL.md` (LEGACY: still read for back-compat,
+ *     never written anymore).
  *
- * If the `.conductor/skills` directory does not exist, returns an empty result
- * with no errors. Each subdirectory under `skills/` is treated as one skill.
- * Malformed SKILL.md files are collected as errors, not thrown.
+ * Results merge by skill name with the `.github` home WINNING on a collision:
+ * a `.conductor` skill never overwrites a `.github` skill of the same name. If
+ * a directory does not exist it is skipped; if NEITHER exists, returns an empty
+ * result with no errors. Each subdirectory under a skills home is treated as
+ * one skill. Malformed SKILL.md files are collected as errors, not thrown.
+ * Warnings and errors from both homes accumulate.
  *
  * All filesystem access goes through the injected `FsReader`, which enforces
  * the `.conductor` symlink containment boundary (Issue 27 / S8).
@@ -34,18 +61,42 @@ export async function loadSkills(
   workspaceRoot: string,
   fs: FsReader,
 ): Promise<SkillLoadResult> {
-  const skillsDir = nodePath.join(workspaceRoot, ".conductor", "skills");
-
   const result: SkillLoadResult = {
     skills: [],
     bodies: new Map(),
+    details: new Map(),
     warnings: [],
     errors: [],
   };
 
-  // Short-circuit if the skills directory does not exist.
+  // Scan the primary home first, then the legacy home. Because we populate the
+  // by-name collections only when a name is not already present, the primary
+  // `.github` skill wins on a name collision with a legacy `.conductor` skill.
+  const primaryDir = nodePath.join(workspaceRoot, ...SKILLS_DIR_SEGMENTS);
+  const legacyDir = nodePath.join(workspaceRoot, ...LEGACY_SKILLS_DIR_SEGMENTS);
+
+  await scanSkillsHome(primaryDir, workspaceRoot, fs, result);
+  await scanSkillsHome(legacyDir, workspaceRoot, fs, result);
+
+  return result;
+}
+
+/**
+ * Scan one skills home, merging its skills into `result`. A directory that does
+ * not exist is skipped (existing not-exists guard). A name already present in
+ * `result` (i.e. claimed by an earlier home) is NOT overwritten, which is what
+ * lets `.github` win over `.conductor` when this is called for `.github` first.
+ * Warnings and errors accumulate into `result` regardless.
+ */
+async function scanSkillsHome(
+  skillsDir: string,
+  workspaceRoot: string,
+  fs: FsReader,
+  result: SkillLoadResult,
+): Promise<void> {
+  // Skip a home that does not exist.
   if (!(await fs.exists(skillsDir))) {
-    return result;
+    return;
   }
 
   const subdirs = await fs.listDirs(skillsDir);
@@ -73,9 +124,20 @@ export async function loadSkills(
       result.warnings.push({ source, warnings: parsed.manifest.warnings });
     }
 
-    result.skills.push(parsed.manifest.value);
-    result.bodies.set(parsed.manifest.value.name, parsed.body);
-  }
+    const name = parsed.manifest.value.name;
 
-  return result;
+    // A skill of this name from an earlier (higher-priority) home wins: do not
+    // let a later home overwrite the bodies/details/skills it already populated.
+    if (result.bodies.has(name)) {
+      continue;
+    }
+
+    result.skills.push(parsed.manifest.value);
+    result.bodies.set(name, parsed.body);
+    // `text` is the raw on-disk SKILL.md; `description` may be undefined.
+    result.details.set(name, {
+      description: parsed.manifest.value.description,
+      raw: text,
+    });
+  }
 }

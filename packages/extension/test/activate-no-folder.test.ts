@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
  * The fix: command + tree-view registration is unconditional; only the
  * folder-dependent wiring is gated. This test loads the BUNDLED extension
  * (dist/extension.js) with a stub `vscode` module that reports NO workspace
- * folder, calls activate(), and asserts all four contributed commands are still
+ * folder, calls activate(), and asserts the core contributed commands are still
  * registered. It mirrors the headless probe technique (Module._load override).
  */
 
@@ -30,7 +30,6 @@ const EXPECTED_COMMANDS = [
   "maestro.spawnAgent",
   "maestro.launchTeam",
   "maestro.openStage",
-  "maestro.focusAgent",
 ] as const;
 
 class EventEmitter {
@@ -66,6 +65,7 @@ function makeVscodeStub(workspaceFolders: unknown, registered: Set<string>): unk
       parse: (s: string) => uriOf(s),
     },
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+    StatusBarAlignment: { Left: 1, Right: 2 },
     ViewColumn: { One: 1, Two: 2, Beside: -2, Active: -1 },
     ExtensionMode: { Production: 1, Development: 2, Test: 3 },
     workspace: {
@@ -97,6 +97,7 @@ function makeVscodeStub(workspaceFolders: unknown, registered: Set<string>): unk
       }),
       createOutputChannel: () => ({ appendLine() {}, append() {}, show() {}, dispose() {} }),
       registerWebviewViewProvider: () => ({ dispose() {} }),
+      createStatusBarItem: () => ({ text: "", tooltip: "", command: "", show() {}, hide() {}, dispose() {} }),
     },
     commands: {
       registerCommand: (id: string) => {
@@ -157,7 +158,7 @@ describe("activate() with no workspace folder", () => {
     execFileSync("node", ["build.mjs"], { cwd: packageRoot, stdio: "ignore" });
   });
 
-  it("registers all four commands when a folder IS open", async () => {
+  it("registers the core commands when a folder IS open", async () => {
     const registered = await activateWith([
       { uri: uriOf(packageRoot), name: "maestro", index: 0 },
     ]);
@@ -166,7 +167,7 @@ describe("activate() with no workspace folder", () => {
     }
   });
 
-  it("STILL registers all four commands when NO folder is open (regression)", async () => {
+  it("STILL registers the core commands when NO folder is open (regression)", async () => {
     // This is the bug: before the fix, activate() returned early and registered
     // zero commands here, so the view-title `+` button and command palette were
     // dead. After the fix, registration is unconditional.

@@ -393,6 +393,47 @@ describe("discoverWorkspace", () => {
     expect(fileWriter!.writeCapable).toBe(true);
   });
 
+  it("collapses a conductor role and its Copilot agent mirror to one item", async () => {
+    // The same logical agent ("implementer") exists BOTH as a canonical
+    // .conductor/roles/implementer.yaml role AND as a .github/agents/implementer.agent.md
+    // Copilot mirror that Maestro itself writes. Without dedup, Discover would show it twice.
+    const dupFiles: Record<string, string> = {
+      [`${ROOT}/.conductor/roles/implementer.yaml`]: `name: Implementer
+instructions: Implement the requested feature in this worktree. Write tests, make them green, then commit.
+engine:
+  id: copilot
+autonomy: auto-approve-safe
+`,
+      [`${ROOT}/.github/agents/implementer.agent.md`]: `---
+name: Implementer
+description: Copilot mirror of the implementer role written by Maestro.
+tools:
+  - Read
+  - Edit
+---
+
+You implement the requested feature in this worktree, write tests, and commit.
+`,
+    };
+
+    const fs = makeFakeFs(dupFiles);
+    const result = await discoverWorkspace(ROOT, fs);
+
+    const normalize = (s: string): string =>
+      s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+    const implementers = result.items.filter((i) => normalize(i.name) === "implementer");
+    // Exactly one survivor for the "implementer" name.
+    expect(implementers).toHaveLength(1);
+    // The canonical conductor role wins; the Copilot mirror was dropped.
+    expect(implementers[0]!.kind).toBe("conductor-role");
+    // No copilot-agent item remains for this agent.
+    const copilotMirrors = result.items.filter(
+      (i) => i.kind === "copilot-agent" && normalize(i.name) === "implementer",
+    );
+    expect(copilotMirrors).toHaveLength(0);
+  });
+
   it("multiple unreadable files all land in skipped", async () => {
     const extraThrow = new Set([
       `${ROOT}/.conductor/roles/unreadable.yaml`,

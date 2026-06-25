@@ -11,20 +11,39 @@ import {
   loadSoul,
   serializeSkill,
   serializeRole,
+  serializeTeam,
   makeNodeFsReader,
   makeNodeFsWriter,
   KNOWN_ENGINE_IDS,
+  SKILLS_DIR_SEGMENTS,
 } from "@maestro/config";
+import type { Role } from "@maestro/core";
 import type { ConfigGateway } from "./library-controller.js";
 import type { AnatomyGateway } from "./anatomy-controller.js";
 
 /**
+ * The shape a freshly-seeded role gets. Copy of the extension's DEFAULT_ROLE so
+ * "New agent" produces a valid, editable role file (the anatomy editor's
+ * role-set-* handlers bail when loadRole returns null, so the file must exist
+ * before the editor opens). The user renames + retools it from there.
+ */
+function defaultRole(name: string): Role {
+  return {
+    name,
+    instructions: "You are an implementer. Make the requested change in this worktree.",
+    engine: { id: "copilot" },
+    autonomy: "auto-approve-safe",
+  };
+}
+
+/**
  * Refuse any name that is not a single, clean path segment before it is joined
  * onto a filesystem path. This is the R6 containment guard at the source: a name
- * carrying a separator or "." / ".." could otherwise traverse out of
- * .conductor/ (the writer's removeDir guard is only a backstop). Skill and role
- * names that fail this are rejected, never sanitized, so a write can never land
- * outside .conductor/<kind>/<name>.
+ * carrying a separator or "." / ".." could otherwise traverse out of its home dir
+ * (.github/skills/ for skills, .conductor/ for roles and teams; the writer's
+ * removeDir guard is only a backstop). Skill and role names that fail this are
+ * rejected, never sanitized, so a write can never land outside the intended
+ * <home>/<name>.
  */
 function assertSafeSegment(value: string, kind: string): void {
   if (
@@ -77,7 +96,10 @@ export function makeConfigGateway(repoRoot: string): ConfigGateway {
     async saveSkill(manifest, body) {
       assertSafeSegment(manifest.name, "skill");
       const fsWriter = await makeNodeFsWriter();
-      const skillDir = nodePath.join(repoRoot, ".conductor", "skills", manifest.name);
+      // Skills live under .github/skills/ (shared with VS Code + Copilot). The
+      // location is defined once in @maestro/config as SKILLS_DIR_SEGMENTS so the
+      // write target stays in lock-step with what the loader reads.
+      const skillDir = nodePath.join(repoRoot, ...SKILLS_DIR_SEGMENTS, manifest.name);
       await fsWriter.mkdir(skillDir);
       const skillPath = nodePath.join(skillDir, "SKILL.md");
       await fsWriter.writeFile(skillPath, serializeSkill(manifest, body));
@@ -85,9 +107,15 @@ export function makeConfigGateway(repoRoot: string): ConfigGateway {
 
     async deleteSkill(name) {
       assertSafeSegment(name, "skill");
-      const fsWriter = await makeNodeFsWriter();
-      const skillDir = nodePath.join(repoRoot, ".conductor", "skills", name);
-      await fsWriter.removeDir(skillDir);
+      // Delete from .github/skills/ (same home the loader and VS Code read).
+      // assertSafeSegment above is the containment guard: name is proven to be a
+      // single clean path segment, so the join cannot escape the skills home.
+      // We use node fs.rm directly here rather than the config writer's removeDir,
+      // because that writer's guard only permits paths under .conductor and would
+      // refuse the .github/skills home. force:true makes a missing dir a no-op.
+      const { rm } = await import("node:fs/promises");
+      const skillDir = nodePath.join(repoRoot, ...SKILLS_DIR_SEGMENTS, name);
+      await rm(skillDir, { recursive: true, force: true });
     },
 
     async setRoleSkills(roleName, skills) {
@@ -113,6 +141,48 @@ export function makeConfigGateway(repoRoot: string): ConfigGateway {
 
       const fsWriter = await makeNodeFsWriter();
       await fsWriter.writeFile(rolePath, serialized);
+    },
+
+    async seedRole(seed) {
+      // Mirror the role-filename convention used everywhere else.
+      const baseName = seed.name.toLowerCase().replace(/\s+/g, "-");
+      assertSafeSegment(baseName, "role");
+      const fsWriter = await makeNodeFsWriter();
+      const rolePath = nodePath.join(repoRoot, ".conductor", "roles", `${baseName}.yaml`);
+      await fsWriter.writeFile(rolePath, serializeRole(defaultRole(seed.name)));
+    },
+
+    async deleteRole(name) {
+      // A role is a SINGLE file (not a dir like a skill). Guard the slug then
+      // remove the file.
+      const baseName = name.toLowerCase().replace(/\s+/g, "-");
+      assertSafeSegment(baseName, "role");
+      const fsWriter = await makeNodeFsWriter();
+      const rolePath = nodePath.join(repoRoot, ".conductor", "roles", `${baseName}.yaml`);
+      await fsWriter.removeFile(rolePath);
+    },
+
+    async writeTeam(team) {
+      const baseName = team.name.toLowerCase().replace(/\s+/g, "-");
+      assertSafeSegment(baseName, "team");
+      const fsWriter = await makeNodeFsWriter();
+      const teamPath = nodePath.join(repoRoot, ".conductor", "teams", `${baseName}.yaml`);
+      // serializeTeam stores roles as NAME strings, so pass role objects whose
+      // only meaningful field is .name (no full Role fabrication needed). The
+      // loader resolves these names back to real roles at load time.
+      const serialized = serializeTeam({
+        name: team.name,
+        roles: team.roleNames.map((n) => ({ name: n }) as Role),
+      });
+      await fsWriter.writeFile(teamPath, serialized);
+    },
+
+    async deleteTeam(name) {
+      const baseName = name.toLowerCase().replace(/\s+/g, "-");
+      assertSafeSegment(baseName, "team");
+      const fsWriter = await makeNodeFsWriter();
+      const teamPath = nodePath.join(repoRoot, ".conductor", "teams", `${baseName}.yaml`);
+      await fsWriter.removeFile(teamPath);
     },
   };
 }

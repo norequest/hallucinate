@@ -84,6 +84,44 @@ function emptyVM(): DiscoverVM {
   };
 }
 
+// ─── renderDiscoverTab: adopted state ─────────────────────────────────────────
+
+describe("renderDiscoverTab: adopted state", () => {
+  function vmWithCard(card: DiscoverCardVM): DiscoverVM {
+    return {
+      groups: [
+        { group: "in-repo", label: "In this repo", count: 1, cards: [card] },
+        { group: "plugins", label: "Plugins", count: 0, cards: [] },
+        { group: "instructions", label: "Instructions", count: 0, cards: [] },
+        { group: "marketplace", label: "Marketplace", count: 1, cards: [makeMarketplaceCard()] },
+      ],
+      scanning: false,
+    };
+  }
+
+  it("a not-yet-adopted card renders an actionable Adopt button", () => {
+    const html = renderDiscoverTab(vmWithCard(makeCard({ adopted: false })));
+    expect(html).toContain('data-action="adopt-agent"');
+    expect(html).toContain(">Adopt</button>");
+    expect(html).not.toContain("discover-btn-adopt adopted");
+  });
+
+  it("an adopted agent card renders an inert, marked Adopted button", () => {
+    const html = renderDiscoverTab(vmWithCard(makeCard({ adopted: true })));
+    expect(html).toContain("discover-btn-adopt adopted");
+    expect(html).toContain("Adopted");
+    expect(html).toContain("disabled");
+    // An already-adopted card no longer wires the adopt action.
+    expect(html).not.toContain('data-action="adopt-agent"');
+  });
+
+  it("an adopted skill card uses the same inert treatment", () => {
+    const html = renderDiscoverTab(vmWithCard(makeCard({ isSkill: true, adopted: true })));
+    expect(html).toContain("discover-btn-adopt adopted");
+    expect(html).not.toContain('data-action="adopt-skill"');
+  });
+});
+
 // ─── renderDiscoverTab: scanning ──────────────────────────────────────────────
 
 describe("renderDiscoverTab: scanning", () => {
@@ -206,6 +244,80 @@ describe("renderDiscoverTab: filter chips", () => {
     const html = renderDiscoverTab(makeVM());
     expect(html).toContain('data-action="discover-filter"');
     expect(html).toContain("discover-filter");
+  });
+
+  it("shows live counts on the All / In this repo / Plugins chips", () => {
+    // makeVM has 1 in-repo card, 0 plugins, 0 instructions -> All=1, repo=1, plugins=0.
+    const html = renderDiscoverTab(makeVM());
+    expect(html).toContain("discover-chip-count");
+    // All chip count = sum of real groups = 1
+    expect(html).toMatch(/All\s*<span class="discover-chip-count">1<\/span>/);
+    // In this repo = 1
+    expect(html).toMatch(/In this repo\s*<span class="discover-chip-count">1<\/span>/);
+    // Plugins = 0
+    expect(html).toMatch(/Plugins\s*<span class="discover-chip-count">0<\/span>/);
+  });
+
+  it("All chip count is the sum across in-repo + plugins + instructions", () => {
+    const vm = makeVM({
+      groups: [
+        { group: "in-repo", label: "In this repo", count: 2, cards: [makeCard(), makeCard({ id: "x" })] },
+        { group: "plugins", label: "Plugins", count: 1, cards: [makeCard({ id: "p" })] },
+        { group: "instructions", label: "Instructions", count: 1, cards: [makeCard({ id: "i" })] },
+        { group: "marketplace", label: "Marketplace", count: 1, cards: [makeMarketplaceCard()] },
+      ],
+    });
+    const html = renderDiscoverTab(vm);
+    expect(html).toMatch(/All\s*<span class="discover-chip-count">4<\/span>/);
+    expect(html).toMatch(/Plugins\s*<span class="discover-chip-count">1<\/span>/);
+  });
+
+  it("does NOT render a count on the dimmed Marketplace chip", () => {
+    const html = renderDiscoverTab(makeVM());
+    // The Marketplace chip is dimmed and carries no count span / data-chip.
+    const chipMatch = html.match(/<button class="discover-chip dimmed"[^>]*>[^<]*Marketplace[^<]*<\/button>/);
+    expect(chipMatch).not.toBeNull();
+    expect(chipMatch![0]).not.toContain("discover-chip-count");
+  });
+});
+
+// ─── renderDiscoverTab: Adopt button treatment ───────────────────────────────
+
+describe("renderDiscoverTab: Adopt button", () => {
+  it("Adopt uses the discover-btn-adopt class (bordered secondary by default)", () => {
+    const card = makeCard({ canAdopt: true, isSkill: false });
+    const html = renderDiscoverTab(makeVM({
+      groups: [{ group: "in-repo", label: "In this repo", count: 1, cards: [card] }],
+    }));
+    // Adopt carries the shared bordered .discover-btn base plus .discover-btn-adopt.
+    expect(html).toMatch(/class="discover-btn discover-btn-adopt"/);
+    // The green check is present in markup but hidden until the .adopted state.
+    expect(html).toContain("discover-adopt-check");
+  });
+});
+
+// ─── renderDiscoverTab: scanned-at label ─────────────────────────────────────
+
+describe("renderDiscoverTab: scanned-at", () => {
+  it("falls back to 'Scanned just now' when the VM carries no scannedAt", () => {
+    const html = renderDiscoverTab(makeVM());
+    expect(html).toContain("Scanned just now");
+  });
+
+  it("uses a real scannedAt value from the VM when present", () => {
+    const vm = makeVM() as DiscoverVM & { scannedAt?: string };
+    vm.scannedAt = "2 minutes ago";
+    const html = renderDiscoverTab(vm);
+    expect(html).toContain("Scanned 2 minutes ago");
+    expect(html).not.toContain("Scanned just now");
+  });
+
+  it("escapes a hostile scannedAt value", () => {
+    const vm = makeVM() as DiscoverVM & { scannedAt?: string };
+    vm.scannedAt = "<script>x</script>";
+    const html = renderDiscoverTab(vm);
+    expect(html).not.toContain("<script>x</script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });
 
@@ -491,5 +603,22 @@ describe("renderDiscoverTab: browse button", () => {
       groups: [{ group: "in-repo", label: "In this repo", count: 1, cards: [card] }],
     }));
     expect(html).toContain('data-action="browse-source"');
+  });
+});
+
+// ─── renderDiscoverTab: empty state ───────────────────────────────────────────
+
+describe("renderDiscoverTab: empty state", () => {
+  it("renders a helpful empty state when no real (non-marketplace) cards exist", () => {
+    const html = renderDiscoverTab(emptyVM());
+    expect(html).toContain('class="discover-empty"');
+    expect(html).toContain("Scan repo");
+  });
+
+  it("does NOT render the empty state when a real card is present", () => {
+    const html = renderDiscoverTab(makeVM({
+      groups: [{ group: "in-repo", label: "In this repo", count: 1, cards: [makeCard()] }],
+    }));
+    expect(html).not.toContain('class="discover-empty"');
   });
 });

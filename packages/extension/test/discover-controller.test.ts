@@ -189,6 +189,35 @@ describe("createDiscoverController", () => {
     expect(draft.provenance.adoptedAt).toBe("2026-06-17T12:00:00.000Z");
   });
 
+  // 5b. adopt-agent re-emits discover-results marking the item adopted
+  it("adopt-agent re-emits discover-results with the item in adoptedSources", async () => {
+    const item = makeItem({ source: "/repo/.github/agents/worker.agent.md" });
+    const deps = makeDeps({
+      scanWorkspace: vi.fn(async () => makeDiscoverResult([item])),
+    });
+    const ctrl = createDiscoverController(deps);
+    await ctrl.handle({ type: "scan-repo" });
+    await ctrl.handle({ type: "adopt-agent", itemId: item.source });
+
+    // A fresh emit followed the adopt; its adoptedSources lists the item source.
+    const last = deps.emitted.at(-1)!;
+    expect(last.adoptedSources).toContain(item.source);
+  });
+
+  // 5c. adopt-skill also re-emits with the item adopted
+  it("adopt-skill re-emits discover-results with the item in adoptedSources", async () => {
+    const skill = makeSkillItem({ source: "/repo/.claude/skills/my-skill/SKILL.md" });
+    const deps = makeDeps({
+      scanWorkspace: vi.fn(async () => makeDiscoverResult([skill])),
+    });
+    const ctrl = createDiscoverController(deps);
+    await ctrl.handle({ type: "scan-repo" });
+    await ctrl.handle({ type: "adopt-skill", itemId: skill.source });
+
+    const last = deps.emitted.at(-1)!;
+    expect(last.adoptedSources).toContain(skill.source);
+  });
+
   // 6. adopt-agent does NOT call writeSkill
   it("adopt-agent does NOT call writeSkill", async () => {
     const item = makeItem({ source: "/repo/.github/agents/worker.agent.md" });

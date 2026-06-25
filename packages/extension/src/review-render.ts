@@ -1,5 +1,10 @@
 /**
  * Full-width review screen renderer. Pure HTML, no DOM, no vscode.
+ * DOM structure mirrors the approved Claude Design prototype
+ * (docs/design-reference/Maestro-prototype.html, lines 1002-1118):
+ * a header band, a two-region body (264px changed-files rail + a right column
+ * holding a "what changed" band, an optional conflict bar, a file-path header,
+ * and the scrolling unified diff), and a sticky decision footer.
  * All engine/git strings are escaped. Palette is emitted as fixed hex;
  * never var(--vscode-*).
  */
@@ -8,31 +13,78 @@ import type { CardVM } from "@maestro/cockpit";
 import { escapeHtml } from "./html.js";
 import type { ParsedDiff, DiffFileChange, DiffLine } from "./diff-parse.js";
 
+/** Options forwarded to the review screen when opening or refreshing a card. */
+export interface ReviewOpenOpts {
+  prMode?: boolean;
+  prDraft?: boolean;
+  retainBranch?: boolean;
+}
+
+/** Host-to-review message telling the webview which card to render. */
+export interface HostToReview {
+  type: "review-state";
+  card: CardVM;
+  opts: ReviewOpenOpts;
+}
+
 // ─── Palette (fixed hex, R2: never var(--vscode-*)) ─────────────────────────
 
+// Every value below is a TOKENS.md value (docs/design-reference/TOKENS.md).
+// Earlier passes leaked warmer, saturated diff accents (two off-token greens
+// and an off-token blue); per TOKENS.md the canonical desaturated tokens win
+// over the prototype's raw diff hexes, so diff-add is the tokens green and the
+// diff meta/hunk blue is the tokens accent.
 const C = {
-  bg: "#1e1e1e",
-  bgCard: "#242424",
-  bgCardBorder: "#3a3a3a",
-  bgHunkHeader: "#242424",
-  rowAdd: "rgba(76,175,80,0.12)",
-  rowDel: "rgba(224,80,80,0.12)",
-  textPrimary: "#e8e8e8",
-  textMuted: "#6a6a6a",
-  textDir: "#6a6a6a",
-  textContext: "#a0a0a0",
-  hunkText: "#4a9eff",
-  addDot: "#4caf50",
-  modDot: "#4a9eff",
-  delDot: "#e05050",
-  addText: "#4caf50",
-  delText: "#e05050",
-  lineNo: "#5a5a5a",
-  gutterAdd: "#4caf50",
-  gutterDel: "#e05050",
-  amber: "#f0a030",
-  primary: "#4a9eff",
-  primaryDanger: "#e05050",
+  bg: "#161618",
+  bgPanel: "#1a1a1e",
+  bgBand: "#1a1a1e",
+  bgPathHeader: "#1a1a1e",
+  bgDiff: "#161618",
+  bgCard: "#26262c",
+  bgCardRaised: "#2e2e36",
+  bgSurfaceLow: "#202026",
+  bgCardBorder: "#33333c",
+  borderHeader: "#2a2a30",
+  borderSubtle: "#2a2a30",
+  borderControl: "#36363e",
+  scrollThumb: "#34343a",
+  scrollThumbHover: "#46464e",
+  // Quiet-blue hunk band.
+  bgHunkHeader: "rgba(74,155,255,0.06)",
+  rowAdd: "rgba(70,201,138,0.11)",
+  rowDel: "rgba(240,96,107,0.11)",
+  textPrimary: "#ededf1",
+  textName: "#ededf1",
+  textSecondary: "#dcdce0",
+  textTertiary: "#9a9aa2",
+  textMuted: "#83838b",
+  textDir: "#6c6c74",
+  textContext: "#cdcdd3",
+  textBody: "#b9b9c0",
+  textGoal: "#6c6c74",
+  diffAdd: "#7fd9a8",
+  diffDel: "#f0848c",
+  diffMeta: "#8ab8ff",
+  diffContext: "#b9b9c0",
+  hunkText: "#8ab8ff",
+  addDot: "#46c98a",
+  modDot: "#83838b",
+  delDot: "#f0848c",
+  addText: "#7fd9a8",
+  delText: "#f0848c",
+  // Accent blue kept available for focus rings + tests that assert it.
+  accentBlue: "#8ab8ff",
+  lineNo: "#5e5e66",
+  eyebrow: "#5e5e66",
+  gutterAdd: "#7fd9a8",
+  gutterDel: "#f0848c",
+  amber: "#e2b35a",
+  amberDim: "#e2a93c",
+  green: "#7fd9a8",
+  greenDeep: "#46c98a",
+  onPrimary: "#161618",
+  danger: "#f0848c",
+  borderHover: "#41414a",
 } as const;
 
 // ─── Review options ───────────────────────────────────────────────────────────
@@ -53,6 +105,12 @@ function toSlug(s: string): string {
     || "agent";
 }
 
+const BRANCH_ICON =
+  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><circle cx="6.5" cy="6" r="2.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="7" r="2.5"/><path d="M6.5 8.5v7M9 7h4.5a3 3 0 013 3"/></svg>`;
+
+const FILE_ICON =
+  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${C.textMuted}" stroke-width="1.6" style="flex-shrink:0"><path d="M13 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V9z"/><path d="M13 3v6h6"/></svg>`;
+
 // ─── reviewHeader ─────────────────────────────────────────────────────────────
 
 function reviewHeader(card: CardVM, opts: ReviewOpts): string {
@@ -60,33 +118,50 @@ function reviewHeader(card: CardVM, opts: ReviewOpts): string {
   const engine = escapeHtml(card.engineId);
   const task = escapeHtml(card.taskDescription);
   const slug = toSlug(card.roleName || card.id);
-  const arrow = `<span style="color:${C.textMuted}">&rarr;</span>`;
-  const branchName = `<span style="font-family:monospace;color:${C.textMuted}">agent/${escapeHtml(slug)}</span> ${arrow} <span style="font-family:monospace;color:${C.textMuted}">main</span>`;
 
-  const prPill = opts.prMode
-    ? ` <span style="font-size:0.75em;padding:2px 6px;border-radius:3px;background:${C.bgCard};color:${C.textMuted};border:1px solid ${C.bgCardBorder}">PR mode</span>`
-    : "";
+  const prPill = opts.prMode ? `<span class="rv-pill">PR mode</span>` : "";
 
   const goalHtml = card.goal
-    ? `<div style="font-style:italic;color:${C.textMuted};font-size:0.85em;margin-top:4px">${escapeHtml(card.goal)}</div>`
+    ? `<span class="rv-goal">${escapeHtml(card.goal)}</span>`
     : "";
 
-  return `<header style="padding:16px 20px;border-bottom:1px solid ${C.bgCardBorder}">
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-    <span style="font-weight:600;color:${C.textPrimary}">${role}</span>
-    <span style="font-size:0.75em;padding:2px 6px;border-radius:3px;background:${C.bgCard};color:${C.textMuted};border:1px solid ${C.bgCardBorder}">${engine}</span>
+  // TODO: CardVM carries no real worktree branch name yet, so this synthesizes
+  // `agent/<slug>` from the role. When the orchestrator surfaces the actual
+  // branch on the review data (e.g. card.branch), render that instead of the slug.
+  const branchChip = `<span class="rv-branch">${BRANCH_ICON}<span>agent/${escapeHtml(slug)}</span> <span style="color:${C.eyebrow}">&rarr; main</span></span>`;
+
+  // Always-available escape back to the Conducting Board. Opening the full review
+  // replaces the whole board in the single-page panel, so without this the
+  // conductor is stranded (the webview wires data-action="review-close").
+  const back = `<button class="rv-back" data-action="review-close" type="button">&larr; Conducting Board</button>`;
+
+  return `<header class="rv-header">
+  ${back}
+  <div class="rv-id">
+    <span class="rv-role">${role}</span>
+    <span class="rv-pill">${engine}</span>
+    ${prPill}
   </div>
-  <div style="margin-top:8px;color:${C.textPrimary}">${task}</div>
-  ${goalHtml}
-  <div style="margin-top:6px;font-size:0.8em">${branchName}${prPill}</div>
+  <div class="rv-task">${task}</div>
+  <div class="rv-meta">
+    ${goalHtml}
+    ${branchChip}
+  </div>
 </header>`;
 }
 
-// ─── filesRail ────────────────────────────────────────────────────────────────
+// ─── filesRail (left 264px region) ───────────────────────────────────────────
 
-function fileDot(status: DiffFileChange["status"]): string {
-  const color = status === "added" ? C.addDot : status === "deleted" ? C.delDot : C.modDot;
-  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>`;
+function fileDot(status: DiffFileChange["status"], conflict: boolean): string {
+  const color = conflict
+    ? C.amber
+    : status === "added"
+      ? C.addDot
+      : status === "deleted"
+        ? C.delDot
+        : C.modDot;
+  // Rounded-square dot (2px radius), matching the prototype's file markers.
+  return `<span class="rv-dot" style="background:${color}"></span>`;
 }
 
 function filesRail(files: DiffFileChange[], conflictFiles?: string[]): string {
@@ -94,7 +169,7 @@ function filesRail(files: DiffFileChange[], conflictFiles?: string[]): string {
 
   const conflictSet = new Set(conflictFiles ?? []);
 
-  // Sort: conflict files first
+  // Sort: conflict files first.
   const sorted = [...files].sort((a, b) => {
     const aConf = conflictSet.has(a.path) ? 0 : 1;
     const bConf = conflictSet.has(b.path) ? 0 : 1;
@@ -103,30 +178,71 @@ function filesRail(files: DiffFileChange[], conflictFiles?: string[]): string {
 
   const rows = sorted.map((f) => {
     const isConflict = conflictSet.has(f.path);
-    const dotColor = isConflict ? C.amber : undefined;
-    const dotHtml = dotColor
-      ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></span>`
-      : fileDot(f.status);
+    const dotHtml = fileDot(f.status, isConflict);
 
     const parts = f.path.split("/");
     const basename = parts[parts.length - 1]!;
     const dir = parts.length > 1 ? parts.slice(0, -1).join("/") + "/" : "";
 
-    const addsHtml = f.adds > 0
-      ? `<span style="color:${C.addText}">+${f.adds}</span>`
-      : "";
-    const delsHtml = f.dels > 0
-      ? `<span style="color:${C.delText}">-${f.dels}</span>`
-      : "";
+    const right = isConflict
+      ? `<span class="rv-conf-chip">conflict</span>`
+      : `<span class="rv-counts"><span style="color:${C.addText}">+${f.adds}</span><span style="color:${C.delText}">&minus;${f.dels}</span></span>`;
 
-    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 20px;font-size:0.85em" title="${escapeHtml(f.path)}" data-path="${escapeHtml(f.path)}">
+    return `<div class="rv-file-row" title="${escapeHtml(f.path)}" data-path="${escapeHtml(f.path)}">
   ${dotHtml}
-  <span style="flex:1"><span style="color:${C.textDir}">${escapeHtml(dir)}</span><span style="color:${C.textPrimary}">${escapeHtml(basename)}</span></span>
-  <span style="display:flex;gap:6px">${addsHtml}${delsHtml}</span>
+  <span class="rv-file-name"><span style="color:${C.textDir}">${escapeHtml(dir)}</span><span style="color:${C.textContext}">${escapeHtml(basename)}</span></span>
+  ${right}
 </div>`;
   }).join("");
 
-  return `<div style="border-bottom:1px solid ${C.bgCardBorder};padding:4px 0">${rows}</div>`;
+  return `<aside class="rv-rail">
+  <div class="rv-eyebrow rv-rail-eyebrow">Changed files</div>
+  <div class="rv-rail-list">${rows}</div>
+</aside>`;
+}
+
+// ─── what-changed band ────────────────────────────────────────────────────────
+
+// Brand eq-bar mark (prototype `review.eq`, Maestro-prototype.html line 1046):
+// the four-bar equalizer that precedes the "WHAT CHANGED" eyebrow. Rendered in
+// the muted eyebrow tone so it reads as a brand mark, not the green action.
+const EQ_MARK =
+  `<span class="rv-eq rv-eq-mark"><span></span><span></span><span></span><span></span></span>`;
+
+function whatChangedBand(role: string, summary: string | undefined): string {
+  if (!summary) return "";
+  return `<div class="rv-whatchanged">
+  <div class="rv-whatchanged-head">
+    ${EQ_MARK}
+    <div class="rv-eyebrow">What changed &middot; ${escapeHtml(role)}</div>
+  </div>
+  <div class="rv-summary">${escapeHtml(summary)}</div>
+</div>`;
+}
+
+// ─── conflict control bar ─────────────────────────────────────────────────────
+
+function conflictControlBar(card: CardVM, conflictFiles: string[]): string {
+  const id = escapeHtml(card.id);
+  const first = conflictFiles[0] ?? "";
+  return `<div class="rv-conflict-bar">
+  <span class="rv-conflict-title">Merge conflict</span>
+  <span class="rv-conflict-path">${escapeHtml(first)}</span>
+  <div class="rv-conflict-actions">
+    <button class="rv-tog rv-btn-stub" data-stretch="true" data-action="keep-ours" data-id="${id}">Keep ours</button>
+    <button class="rv-tog rv-btn-stub" data-stretch="true" data-action="keep-theirs" data-id="${id}">Keep theirs</button>
+    <button class="rv-tog" data-action="resolve-conflict" data-id="${id}">Edit</button>
+  </div>
+</div>`;
+}
+
+// ─── file-path header ─────────────────────────────────────────────────────────
+
+function filePathHeader(path: string): string {
+  return `<div class="rv-path-header">
+  ${FILE_ICON}
+  <span class="rv-path-text">${escapeHtml(path)}</span>
+</div>`;
 }
 
 // ─── diffBody ────────────────────────────────────────────────────────────────
@@ -139,31 +255,25 @@ function renderDiffLine(line: DiffLine, isConflict: boolean): string {
   const escaped = escapeHtml(line.text);
   const oldNoStr = line.oldNo !== undefined ? String(line.oldNo) : "";
   const newNoStr = line.newNo !== undefined ? String(line.newNo) : "";
-  const lineNoHtml = `<span style="color:${C.lineNo};width:40px;text-align:right;padding-right:8px;font-size:0.8em;flex-shrink:0">${escapeHtml(oldNoStr)}</span><span style="color:${C.lineNo};width:40px;text-align:right;padding-right:8px;font-size:0.8em;flex-shrink:0">${escapeHtml(newNoStr)}</span>`;
+  const lineNoHtml =
+    `<span class="rv-ln">${escapeHtml(oldNoStr)}</span><span class="rv-ln">${escapeHtml(newNoStr)}</span>`;
 
   if (line.kind === "add") {
-    const isMarker = isConflictMarker(line.text);
-    const bg = isConflict && isMarker ? `rgba(240,160,48,0.18)` : C.rowAdd;
-    const textColor = isConflict && isMarker ? C.amber : C.addText;
-    return `<div style="display:flex;align-items:baseline;background:${bg};font-family:monospace;font-size:0.83em">${lineNoHtml}<span style="color:${C.gutterAdd};padding-right:8px;flex-shrink:0">+</span><span style="color:${textColor};word-break:break-all">${escaped}</span></div>`;
+    const marker = isConflict && isConflictMarker(line.text);
+    const bg = marker ? "rgba(226,169,60,0.10)" : C.rowAdd;
+    const textColor = marker ? C.amber : C.diffAdd;
+    const sign = marker ? " " : "+";
+    return `<div class="rv-line" style="background:${bg}">${lineNoHtml}<span class="rv-sign" style="color:${textColor}">${sign}</span><span class="rv-code" style="color:${textColor}">${escaped}</span></div>`;
   }
   if (line.kind === "del") {
-    const isMarker = isConflictMarker(line.text);
-    const bg = isConflict && isMarker ? `rgba(240,160,48,0.18)` : C.rowDel;
-    const textColor = isConflict && isMarker ? C.amber : C.delText;
-    return `<div style="display:flex;align-items:baseline;background:${bg};font-family:monospace;font-size:0.83em">${lineNoHtml}<span style="color:${C.gutterDel};padding-right:8px;flex-shrink:0">-</span><span style="color:${textColor};word-break:break-all">${escaped}</span></div>`;
+    const marker = isConflict && isConflictMarker(line.text);
+    const bg = marker ? "rgba(226,169,60,0.10)" : C.rowDel;
+    const textColor = marker ? C.amber : C.diffDel;
+    const sign = marker ? " " : "-";
+    return `<div class="rv-line" style="background:${bg}">${lineNoHtml}<span class="rv-sign" style="color:${textColor}">${sign}</span><span class="rv-code" style="color:${textColor}">${escaped}</span></div>`;
   }
   // context
-  return `<div style="display:flex;align-items:baseline;font-family:monospace;font-size:0.83em">${lineNoHtml}<span style="padding-right:8px;flex-shrink:0"> </span><span style="color:${C.textContext};word-break:break-all">${escaped}</span></div>`;
-}
-
-function conflictHunkControls(cardId: string): string {
-  const id = escapeHtml(cardId);
-  return `<div style="display:flex;gap:8px;padding:6px 20px">
-  <button data-action="resolve-conflict" data-id="${id}" style="font-size:0.75em;padding:3px 8px;background:${C.bgCard};border:1px solid ${C.bgCardBorder};color:${C.textMuted};border-radius:3px;cursor:pointer">Edit in Editor</button>
-  <button data-stretch="true" data-action="keep-ours" data-id="${id}" style="font-size:0.75em;padding:3px 8px;background:${C.bgCard};border:1px solid ${C.bgCardBorder};color:${C.textMuted};border-radius:3px;cursor:pointer;opacity:0.6">Keep ours</button>
-  <button data-stretch="true" data-action="keep-theirs" data-id="${id}" style="font-size:0.75em;padding:3px 8px;background:${C.bgCard};border:1px solid ${C.bgCardBorder};color:${C.textMuted};border-radius:3px;cursor:pointer;opacity:0.6">Keep theirs</button>
-</div>`;
+  return `<div class="rv-line">${lineNoHtml}<span class="rv-sign"> </span><span class="rv-code" style="color:${C.diffContext}">${escaped}</span></div>`;
 }
 
 function diffBody(files: DiffFileChange[], card: CardVM): string {
@@ -176,100 +286,147 @@ function diffBody(files: DiffFileChange[], card: CardVM): string {
 
     const hunkHtml = f.hunks.map((hunk) => {
       const linesHtml = hunk.lines.map((l) => renderDiffLine(l, isConflictFile)).join("");
-      const hunkControls = isConflictFile ? conflictHunkControls(card.id) : "";
-      return `<div style="background:${C.bgHunkHeader};color:${C.hunkText};padding:3px 20px;font-family:monospace;font-size:0.8em">${escapeHtml(hunk.header)}</div>${linesHtml}${hunkControls}`;
+      return `<div class="rv-line rv-hunk-header"><span class="rv-ln"></span><span class="rv-ln"></span><span class="rv-sign"> </span><span class="rv-code rv-hunk-text">${escapeHtml(hunk.header)}</span></div>${linesHtml}`;
     }).join("");
 
-    return `<div style="margin-bottom:8px">${hunkHtml}</div>`;
+    return `<div class="rv-file-block">${filePathHeader(f.path)}${hunkHtml}</div>`;
   }).join("");
 
-  return `<div style="overflow-x:auto">${fileBlocks}</div>`;
-}
-
-// ─── summaryCard ──────────────────────────────────────────────────────────────
-
-function summaryCard(summary: string | undefined): string {
-  if (!summary) return "";
-  return `<div style="margin:12px 20px;padding:12px;background:${C.bgCard};border:1px solid ${C.bgCardBorder};border-radius:4px">
-  <div style="font-size:0.7em;letter-spacing:0.08em;text-transform:uppercase;color:${C.textMuted};margin-bottom:6px">What the agent says</div>
-  <div style="color:${C.textPrimary};font-size:0.9em">${escapeHtml(summary)}</div>
-</div>`;
+  return `<div class="rv-diff">${fileBlocks}</div>`;
 }
 
 // ─── decisionBar ─────────────────────────────────────────────────────────────
 
-function btn(label: string, action: string, id: string, style: string, extra = ""): string {
-  return `<button data-action="${action}" data-id="${escapeHtml(id)}" style="${style}"${extra}>${label}</button>`;
+function btn(label: string, action: string, id: string, variant: string, extra = ""): string {
+  return `<button class="rv-btn ${variant}" data-action="${action}" data-id="${escapeHtml(id)}"${extra}>${label}</button>`;
+}
+
+function feedbackRow(): string {
+  // The "Request changes" (sendBack) handler in review-main reads the textarea
+  // inside this footer. Without it the button could not collect feedback to
+  // re-launch the agent with. The textarea lives ON ITS OWN ROW above the
+  // buttons (footer.querySelector("textarea") in review-main finds it).
+  return `<div class="rv-feedback-row">
+  <div class="rv-eyebrow">Request changes</div>
+  <textarea class="rv-feedback" data-role="feedback" placeholder="What needs to change before this can merge?"></textarea>
+</div>`;
 }
 
 function decisionBar(card: CardVM, opts: ReviewOpts, diffErrorPresent: boolean): string {
   const id = card.id;
-  const primaryStyle = `padding:6px 14px;background:${C.primary};color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600`;
-  const dangerStyle = `padding:6px 14px;background:${C.primaryDanger};color:#fff;border:none;border-radius:4px;cursor:pointer`;
-  const secondaryStyle = `padding:6px 14px;background:${C.bgCard};color:${C.textMuted};border:1px solid ${C.bgCardBorder};border-radius:4px;cursor:pointer`;
-  // flex-wrap so the full-width feedback textarea sits on its own row above the buttons.
-  const barStyle = `display:flex;flex-wrap:wrap;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}`;
-  // The "Request changes" (sendBack) handler in review-main reads the textarea inside
-  // this footer. Without it the button could not collect feedback to re-launch with.
-  const feedback = `<textarea data-role="feedback" placeholder="Feedback for Request changes (optional)..." style="flex-basis:100%;min-height:44px;background:#242424;color:#e8e8e8;border:1px solid #3a3a3a;border-radius:4px;padding:6px;box-sizing:border-box;font:inherit"></textarea>`;
+  const primary = "rv-btn-primary";
+  const danger = "rv-btn-danger";
+  const secondary = "rv-btn-secondary";
 
-  // merge-cleanup-failed: retry-cleanup primary (no feedback row)
+  // merge-cleanup-failed: retry-cleanup primary (no feedback row).
   if (card.state === "merge-cleanup-failed") {
-    return `<footer style="display:flex;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}">
-  ${btn("Retry cleanup", "retry-cleanup", id, primaryStyle)}
-  ${btn("Discard", "discard", id, dangerStyle)}
+    return `<footer class="rv-bar">
+  <div class="rv-bar-row">
+    ${btn("Discard", "discard", id, danger)}
+    <div class="rv-bar-actions">
+      ${btn("Retry cleanup", "retry-cleanup", id, primary)}
+    </div>
+  </div>
 </footer>`;
   }
 
-  // conflict: finish-merge primary
+  // conflict: finish-merge primary (Resolve and merge). The conflict decision bar
+  // holds Discard, Request changes, and "Resolve and merge"; the
+  // "Edit"/resolve-conflict hand-off lives in the conflict CONTROL bar above the
+  // diff, not here.
   if (card.state === "conflict") {
-    return `<footer style="${barStyle}">
-  ${feedback}
-  ${btn("Resolve and merge", "finish-merge", id, primaryStyle)}
-  ${btn("Resolve in Editor", "resolve-conflict", id, secondaryStyle)}
-  ${btn("Discard", "discard", id, dangerStyle)}
-  ${btn("Request changes", "sendBack", id, secondaryStyle)}
-  ${btn("Approve", "approve", id, secondaryStyle)}
+    return `<footer class="rv-bar">
+  ${feedbackRow()}
+  <div class="rv-bar-row">
+    ${btn("Discard", "discard", id, danger)}
+    <div class="rv-bar-actions">
+      ${btn("Request changes", "sendBack", id, secondary)}
+      ${btn("Resolve and merge", "finish-merge", id, primary)}
+    </div>
+  </div>
 </footer>`;
   }
 
-  // pr-created: terminal state, just discard (no feedback row)
+  // pr-created: terminal state, just discard (no feedback row).
   if (card.state === "pr-created") {
-    return `<footer style="display:flex;gap:10px;padding:12px 20px;border-top:1px solid ${C.bgCardBorder}">
-  ${btn("Discard", "discard", id, secondaryStyle)}
+    return `<footer class="rv-bar">
+  <div class="rv-bar-row">
+    <div class="rv-bar-actions">
+      ${btn("Discard", "discard", id, secondary)}
+    </div>
+  </div>
 </footer>`;
   }
 
-  // PR mode: create-pr primary
+  // stopped: the run did not finish. Offer Resume (relaunch in the same worktree)
+  // or Discard. Never Merge: there is no completed result to land.
+  if (card.state === "stopped") {
+    return `<footer class="rv-bar">
+  <div class="rv-bar-row">
+    ${btn("Discard", "discard", id, danger)}
+    <div class="rv-bar-actions">
+      ${btn("Resume", "resume", id, primary)}
+    </div>
+  </div>
+</footer>`;
+  }
+
+  // error: the run failed; there is nothing to merge, so only Discard.
+  if (card.state === "error") {
+    return `<footer class="rv-bar">
+  <div class="rv-bar-row">
+    <div class="rv-bar-actions">
+      ${btn("Discard", "discard", id, danger)}
+    </div>
+  </div>
+</footer>`;
+  }
+
+  // A done run with an EMPTY diff (computed, zero files) produced no changes, so
+  // there is nothing to land: the Merge / Create PR primary is disabled (the user
+  // can still Discard or send it back). A missing diff (still computing, or a
+  // diffError) is handled separately and keeps merge reachable.
+  const noChanges = card.state === "done" && !!card.diff && card.diff.files.length === 0;
+
+  // PR mode: create-pr primary.
   if (opts.prMode) {
     const label = opts.prDraft ? "Create draft PR" : "Create PR";
-    return `<footer style="${barStyle}">
-  ${feedback}
-  ${btn(label, "create-pr", id, primaryStyle)}
-  ${btn("Discard", "discard", id, dangerStyle)}
-  ${btn("Request changes", "sendBack", id, secondaryStyle)}
-  ${btn("Approve", "approve", id, secondaryStyle)}
+    const prDisabled = noChanges || diffErrorPresent ? " disabled" : "";
+    return `<footer class="rv-bar">
+  ${feedbackRow()}
+  <div class="rv-bar-row">
+    ${btn("Discard", "discard", id, danger)}
+    <div class="rv-bar-actions">
+      ${btn("Request changes", "sendBack", id, secondary)}
+      ${btn(label, "create-pr", id, primary, prDisabled)}
+    </div>
+  </div>
 </footer>`;
   }
 
-  // Normal: merge primary (disabled if diffError)
-  const mergeDisabled = diffErrorPresent ? " disabled" : "";
-  return `<footer style="${barStyle}">
-  ${feedback}
-  <button data-action="merge" data-id="${escapeHtml(id)}" style="${primaryStyle}"${mergeDisabled}>Merge into main</button>
-  ${btn("Discard", "discard", id, dangerStyle)}
-  ${btn("Request changes", "sendBack", id, secondaryStyle)}
-  ${btn("Approve", "approve", id, secondaryStyle)}
+  // Normal: merge primary (disabled if diffError or no changes).
+  const mergeDisabled = noChanges || diffErrorPresent ? " disabled" : "";
+  return `<footer class="rv-bar">
+  ${feedbackRow()}
+  <div class="rv-bar-row">
+    ${btn("Discard", "discard", id, danger)}
+    <div class="rv-bar-actions">
+      ${btn("Request changes", "sendBack", id, secondary)}
+      <button class="rv-btn rv-btn-primary" data-action="merge" data-id="${escapeHtml(id)}"${mergeDisabled}><span class="rv-eq"><span></span><span></span><span></span><span></span></span>Merge into main</button>
+    </div>
+  </div>
 </footer>`;
 }
 
-// ─── Conflict banner ──────────────────────────────────────────────────────────
+// ─── Conflict banner (used when no diff body) ─────────────────────────────────
 
 function conflictBanner(conflictFiles: string[]): string {
   const n = conflictFiles.length;
   const noun = n === 1 ? "file" : "files";
-  return `<div style="background:rgba(240,160,48,0.15);border-left:4px solid ${C.amber};padding:10px 20px;color:${C.amber};font-weight:600">
-  Merge conflict in ${n} ${noun}
+  const first = conflictFiles[0] ?? "";
+  return `<div class="rv-conflict-bar">
+  <span class="rv-conflict-title">Merge conflict in ${n} ${noun}</span>
+  <span class="rv-conflict-path">${escapeHtml(first)}</span>
 </div>`;
 }
 
@@ -278,10 +435,10 @@ function conflictBanner(conflictFiles: string[]): string {
 function cleanupFailedBanner(card: CardVM, opts: ReviewOpts): string {
   const branchNote = opts.retainBranch ? "branch kept" : "branch cleaned up";
   const errorHtml = card.error
-    ? `<pre style="margin:8px 0 4px;font-size:0.8em;color:${C.textContext};white-space:pre-wrap;word-break:break-all">${escapeHtml(card.error)}</pre>`
+    ? `<pre class="rv-pre">${escapeHtml(card.error)}</pre>`
     : "";
-  return `<div style="background:rgba(240,160,48,0.15);border-left:4px solid ${C.amber};padding:10px 20px;margin:12px 20px;border-radius:0 4px 4px 0">
-  <div style="color:${C.amber};font-weight:600">Merged successfully. Worktree cleanup did not finish.</div>
+  return `<div class="rv-amber-card">
+  <div style="color:${C.amber};font-weight:700">Merged successfully. Worktree cleanup did not finish.</div>
   <div style="color:${C.textMuted};font-size:0.85em;margin-top:4px">${escapeHtml(branchNote)}</div>
   ${errorHtml}
   <div style="color:${C.textMuted};font-size:0.8em;margin-top:6px;font-style:italic">This is housekeeping, not data loss. Your changes are safely merged.</div>
@@ -291,61 +448,359 @@ function cleanupFailedBanner(card: CardVM, opts: ReviewOpts): string {
 // ─── diff-error panel ─────────────────────────────────────────────────────────
 
 function diffErrorPanel(diffError: string): string {
-  return `<div style="margin:12px 20px;padding:12px;background:${C.bgCard};border:1px solid ${C.bgCardBorder};border-radius:4px;color:${C.delText}">
+  return `<div class="rv-card" style="color:${C.delText}">
   <div style="font-size:0.8em;font-weight:600;margin-bottom:4px">Could not compute diff</div>
-  <pre style="font-size:0.8em;white-space:pre-wrap;word-break:break-all;color:${C.textContext};margin:0">${escapeHtml(diffError)}</pre>
+  <pre class="rv-pre" style="color:${C.textContext}">${escapeHtml(diffError)}</pre>
+</div>`;
+}
+
+// ─── run-error panel ──────────────────────────────────────────────────────────
+
+// Shown when an `error`-state card reaches the review screen with no diff to
+// render. Without this the right column was blank above a Discard-only footer.
+// Mirrors diffErrorPanel's .rv-card/.rv-pre styling.
+function runErrorPanel(error: string | undefined): string {
+  const body = error
+    ? `<pre class="rv-pre" style="color:${C.textContext}">${escapeHtml(error)}</pre>`
+    : `<div style="color:${C.textContext};font-size:0.85em">This run ended with an error.</div>`;
+  return `<div class="rv-card" style="color:${C.delText}">
+  <div style="font-size:0.8em;font-weight:600;margin-bottom:4px">Run failed</div>
+  ${body}
 </div>`;
 }
 
 // ─── pr-created terminal note ─────────────────────────────────────────────────
 
 function prCreatedNote(): string {
-  return `<div style="margin:12px 20px;padding:12px;background:${C.bgCard};border:1px solid ${C.bgCardBorder};border-radius:4px;color:${C.textMuted}">
+  return `<div class="rv-card" style="color:${C.textMuted}">
   Pull request opened. Worktree released, branch kept.
+</div>`;
+}
+
+// ─── no-file-changes notice ───────────────────────────────────────────────────
+
+// Some agents only print chat output (for example "say hello") and touch zero
+// files. The diff region must say so honestly instead of rendering an empty diff
+// or a misleading "+0 -0" stat. The agent's "what changed" summary still renders
+// above this, so its words are preserved.
+function noChangesNote(): string {
+  return `<div class="rv-card" style="color:${C.textMuted}">
+  No file changes. This run produced output but did not modify any files.
 </div>`;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function renderReview(card: CardVM, parsed: ParsedDiff, opts: ReviewOpts = {}): string {
+/**
+ * The review screen's inner markup PLUS its scoped `<style>` block, with NO
+ * doctype/html/head/body wrapper. Use this when injecting the review screen into
+ * an existing document (the single-page router drops it straight into `#root`).
+ * The standalone {@link renderReview} wraps this in a full HTML document.
+ *
+ * The `<style>` rules use `body { ... }` / `*` selectors so they apply identically
+ * whether this fragment is the whole document body or a sub-tree of one.
+ */
+export function renderReviewBody(card: CardVM, parsed: ParsedDiff, opts: ReviewOpts = {}): string {
   const isConflict = card.state === "conflict";
   const isCleanupFailed = card.state === "merge-cleanup-failed";
   const isPrCreated = card.state === "pr-created";
   const hasDiffError = !!card.diffError;
 
   const header = reviewHeader(card, opts);
-  const rail = filesRail(parsed.files, isConflict ? (card.conflictFiles ?? []) : []);
+  const conflictFiles = isConflict ? (card.conflictFiles ?? []) : [];
+  const rail = filesRail(parsed.files, conflictFiles);
+  const band = whatChangedBand(card.roleName, card.summary);
 
-  let bodyContent: string;
+  // The right column: what-changed band, then a state-dependent body region.
+  let rightBody: string;
   if (isCleanupFailed) {
-    bodyContent = cleanupFailedBanner(card, opts);
+    rightBody = cleanupFailedBanner(card, opts);
   } else if (isPrCreated) {
-    bodyContent = prCreatedNote();
+    rightBody = prCreatedNote();
   } else if (hasDiffError) {
-    bodyContent = diffErrorPanel(card.diffError!);
-  } else if (isConflict && (card.conflictFiles?.length ?? 0) > 0) {
-    bodyContent = conflictBanner(card.conflictFiles!) + diffBody(parsed.files, card);
+    rightBody = diffErrorPanel(card.diffError!);
+  } else if (card.state === "error") {
+    // An error-state card has no diff to show; render the failure text in a
+    // panel so the right column is never blank above the Discard-only footer.
+    rightBody = runErrorPanel(card.error);
+  } else if (isConflict && conflictFiles.length > 0) {
+    rightBody =
+      conflictControlBar(card, conflictFiles) +
+      conflictBanner(conflictFiles) +
+      diffBody(parsed.files, card);
+  } else if (parsed.files.length === 0) {
+    // No changed files: be honest instead of rendering an empty diff. The
+    // "what changed" band above still carries the agent's summary if it wrote one.
+    rightBody = noChangesNote();
   } else {
-    bodyContent = diffBody(parsed.files, card);
+    rightBody = diffBody(parsed.files, card);
   }
 
-  const summary = summaryCard(card.summary);
   const bar = decisionBar(card, opts, hasDiffError);
 
   const style = `<style>
     * { box-sizing: border-box; }
-    body { margin: 0; background: ${C.bg}; color: ${C.textPrimary}; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: ${C.bg}; color: ${C.textPrimary};
+      font-family: 'Inter', system-ui, sans-serif; }
+
+    .rv-screen { display: flex; flex-direction: column; min-height: 100vh; background: ${C.bg}; }
+
+    /* Header band */
+    .rv-header { flex: 0 0 auto; padding: 16px 22px; border-bottom: 1px solid ${C.borderHeader}; background: ${C.bg}; }
+    .rv-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-bottom: 13px; padding: 5px 11px;
+      background: ${C.bgCard}; color: ${C.textTertiary};
+      border: 1px solid ${C.borderControl}; border-radius: 7px;
+      font-family: 'Inter', system-ui, sans-serif; font-size: 11.5px; font-weight: 600;
+      cursor: pointer;
+      transition: background 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out, transform 120ms ease-out;
+    }
+    .rv-back:hover { background: ${C.bgCardRaised}; color: ${C.textPrimary}; border-color: ${C.borderHover}; }
+    .rv-back:active { transform: translateY(1px); }
+    .rv-back:focus-visible { outline: none; box-shadow: 0 0 0 2px ${C.accentBlue}; }
+    .rv-id { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .rv-role { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 16px; color: ${C.textName}; }
+    .rv-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; padding: 3px 9px; border-radius: 6px;
+      background: ${C.bgPanel}; color: ${C.textMuted}; border: 1px solid ${C.bgCard};
+    }
+    .rv-task { font-size: 13px; color: ${C.textContext}; margin-top: 8px; line-height: 1.45; }
+    .rv-meta { display: flex; align-items: center; gap: 12px; margin-top: 7px; flex-wrap: wrap; }
+    .rv-goal { font-size: 11.5px; color: ${C.textGoal}; font-style: italic; }
+    .rv-branch {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: ${C.textTertiary};
+      background: ${C.bgPanel}; border: 1px solid ${C.bgCard}; border-radius: 6px; padding: 3px 9px;
+    }
+    .rv-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${C.eyebrow};
+    }
+
+    /* Body: two regions */
+    .rv-body { flex: 1; min-height: 0; display: flex; }
+
+    /* Left: changed-files rail */
+    .rv-rail {
+      width: 264px; flex: 0 0 264px;
+      border-right: 1px solid ${C.borderHeader};
+      overflow: auto; padding: 14px 12px; background: ${C.bgPanel};
+    }
+    .rv-rail-eyebrow { margin: 2px 6px 11px; }
+    .rv-rail-list { display: flex; flex-direction: column; gap: 3px; }
+    .rv-file-row {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 11px; border-radius: 8px; cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 120ms ease;
+    }
+    .rv-file-row:hover { background: ${C.bgSurfaceLow}; }
+    .rv-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 2px; }
+    .rv-file-name {
+      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    }
+    .rv-counts {
+      margin-left: auto; display: flex; gap: 8px; flex-shrink: 0;
+      font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+      font-variant-numeric: tabular-nums;
+    }
+    .rv-conf-chip {
+      margin-left: auto; font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; font-weight: 600; letter-spacing: 0.06em; color: ${C.amber};
+      background: rgba(226,169,60,0.12); padding: 2px 7px; border-radius: 5px;
+    }
+
+    /* Right column */
+    .rv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .rv-whatchanged {
+      flex: 0 0 auto; padding: 14px 20px;
+      border-bottom: 1px solid ${C.borderHeader}; background: ${C.bgBand};
+    }
+    .rv-whatchanged-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+    .rv-summary { font-size: 12.5px; color: ${C.textBody}; line-height: 1.6; }
+
+    /* Conflict control bar */
+    .rv-conflict-bar {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 11px;
+      padding: 11px 20px;
+      background: rgba(226,169,60,0.08); border-bottom: 1px solid rgba(226,169,60,0.22);
+    }
+    .rv-conflict-title { color: ${C.amber}; font-size: 12px; font-weight: 700; }
+    .rv-conflict-path { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: ${C.amberDim}; }
+    .rv-conflict-actions { margin-left: auto; display: flex; gap: 7px; }
+    .rv-tog {
+      cursor: pointer; font-size: 11.5px; font-weight: 600;
+      padding: 5px 12px; border-radius: 6px; border: 1px solid ${C.borderControl};
+      background: ${C.bgCard}; color: ${C.textContext};
+      font-family: 'Inter', system-ui, sans-serif;
+      transition: background 120ms ease-out, transform 120ms ease-out;
+    }
+    .rv-tog:hover { background: ${C.bgCardRaised}; }
+    .rv-tog:active:not(:disabled) { transform: translateY(1px); }
+
+    /* File-path header */
+    .rv-path-header {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
+      padding: 10px 20px;
+      border-bottom: 1px solid ${C.borderHeader}; background: ${C.bgPathHeader};
+    }
+    .rv-path-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: ${C.textContext}; }
+
+    /* Diff body */
+    .rv-diff { flex: 1; min-height: 0; overflow: auto; background: ${C.bgDiff}; }
+    .rv-file-block { }
+    .rv-line { display: flex; align-items: baseline; }
+    .rv-ln {
+      flex: 0 0 46px; text-align: right; padding-right: 10px;
+      color: ${C.lineNo}; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      line-height: 1.7; user-select: none;
+    }
+    .rv-sign {
+      flex: 0 0 16px; text-align: center;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.7;
+    }
+    .rv-code {
+      flex: 1; white-space: pre; overflow: hidden; word-break: break-all;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.7;
+      padding-right: 14px;
+    }
+    .rv-hunk-header { background: ${C.bgHunkHeader}; }
+    .rv-hunk-text { color: ${C.hunkText}; }
+
+    /* Shared card + amber recovery states (cleanup-failed / diff-error / pr-created) */
+    .rv-card {
+      margin: 12px 20px; padding: 12px;
+      background: ${C.bgCard}; border: 1px solid ${C.bgCardBorder}; border-radius: 8px;
+    }
+    .rv-amber-card {
+      margin: 12px 20px; padding: 11px 14px;
+      background: rgba(226,169,60,0.08); border: 1px solid rgba(226,169,60,0.30);
+      border-left: 4px solid ${C.amber}; border-radius: 0 8px 8px 0;
+    }
+    .rv-pre { margin: 8px 0 8px; font-size: 0.8em; white-space: pre-wrap; word-break: break-all; }
+
+    /* Decision bar: sticky footer; contains the feedback textarea row. */
+    .rv-bar {
+      flex: 0 0 auto; position: sticky; bottom: 0; z-index: 2;
+      border-top: 1px solid ${C.borderSubtle}; background: ${C.bgPathHeader};
+    }
+    .rv-feedback-row {
+      padding: 14px 20px; border-bottom: 1px solid ${C.borderSubtle};
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .rv-feedback {
+      width: 100%; min-height: 74px;
+      background: ${C.bg}; color: ${C.textSecondary};
+      border: 1px solid ${C.borderSubtle}; border-radius: 8px;
+      padding: 11px 12px;
+      font-family: 'Inter', system-ui, sans-serif; font-size: 12.5px; line-height: 1.5;
+      resize: vertical;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .rv-feedback:focus {
+      outline: none; border-color: ${C.accentBlue};
+      box-shadow: 0 0 0 1px ${C.accentBlue};
+    }
+    .rv-bar-row { display: flex; align-items: center; gap: 9px; padding: 13px 20px; }
+    .rv-bar-actions { margin-left: auto; display: flex; align-items: center; gap: 9px; }
+
+    /* Button hierarchy */
+    .rv-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 16px; border-radius: 8px; cursor: pointer;
+      font-family: 'Inter', system-ui, sans-serif; font-size: 12.5px; font-weight: 600; line-height: 1.2;
+      border: 1px solid transparent;
+      transition: background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out, box-shadow 120ms ease-out, transform 120ms ease-out;
+    }
+    .rv-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px ${C.accentBlue}; }
+    .rv-btn[disabled] { opacity: 0.5; cursor: default; }
+    .rv-btn:active:not([disabled]) { transform: translateY(1px); }
+
+    /* Primary = green-tinted Merge / Resolve and merge / Create PR / Retry cleanup. */
+    .rv-btn-primary {
+      padding: 9px 20px; font-weight: 700;
+      background: rgba(70,201,138,0.18); border-color: rgba(70,201,138,0.45); color: ${C.green};
+    }
+    .rv-btn-primary:hover:not([disabled]) { background: rgba(70,201,138,0.28); }
+
+    /* Danger = Discard. */
+    .rv-btn-danger {
+      background: transparent; color: ${C.danger}; border-color: rgba(240,96,107,0.32);
+    }
+    .rv-btn-danger:hover:not([disabled]) { background: rgba(240,96,107,0.10); border-color: rgba(240,96,107,0.5); }
+
+    /* Secondary = Request changes / Resolve in Editor. */
+    .rv-btn-secondary { background: ${C.bgCard}; color: ${C.textContext}; border-color: ${C.borderControl}; }
+    .rv-btn-secondary:hover:not([disabled]) { background: ${C.bgCardRaised}; border-color: ${C.borderHover}; color: ${C.textPrimary}; }
+
+    /* Unwired conflict stubs stay dimmed. */
+    .rv-btn-stub { opacity: 0.6; }
+
+    /* Equalizer mark on the merge button (reuses the prototype's eqbar feel). */
+    .rv-eq { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+    .rv-eq > span { width: 2px; background: ${C.green}; border-radius: 1px; }
+    .rv-eq > span:nth-child(1) { height: 7px; }
+    .rv-eq > span:nth-child(2) { height: 11px; }
+    .rv-eq > span:nth-child(3) { height: 5px; }
+    .rv-eq > span:nth-child(4) { height: 9px; }
+    /* Brand mark variant in the what-changed band: muted eyebrow tone, not green. */
+    .rv-eq-mark > span { background: ${C.eyebrow}; }
+
+    /* Scrollbars match the prototype graphite. */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: ${C.scrollThumb}; border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: ${C.scrollThumbHover}; background-clip: content-box; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    /* Narrow docked panel: stack the changed-files rail ABOVE the diff so the
+       fixed 264px rail stops squeezing the right column to nothing. */
+    @media (max-width: 720px) {
+      .rv-body { flex-direction: column; }
+      .rv-rail {
+        width: 100%; flex: 0 0 auto;
+        border-right: none; border-bottom: 1px solid ${C.borderHeader};
+        max-height: 180px;
+      }
+    }
+
+    /* Honor reduced-motion: kill the press transforms and drop the hover/focus
+       transitions on this screen's controls. There are no looping animations. */
+    @media (prefers-reduced-motion: reduce) {
+      .rv-back, .rv-tog, .rv-btn, .rv-file-row, .rv-feedback { transition: none !important; }
+      .rv-back:active, .rv-tog:active:not(:disabled),
+      .rv-btn:active:not([disabled]) { transform: none !important; }
+    }
   </style>`;
 
+  return `${style}
+<div class="rv-screen">
+${header}
+<div class="rv-body">
+${rail}
+<div class="rv-main">
+${band}
+${rightBody}
+</div>
+</div>
+${bar}
+</div>`;
+}
+
+/**
+ * The full-document review screen: {@link renderReviewBody} wrapped in a
+ * standalone HTML document. Used by the dedicated review webview shell, whose
+ * `<body>` is otherwise empty. The single-page router uses renderReviewBody
+ * directly instead.
+ */
+export function renderReview(card: CardVM, parsed: ParsedDiff, opts: ReviewOpts = {}): string {
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8">${style}</head>
+<head><meta charset="UTF-8"></head>
 <body>
-${header}
-${rail}
-${bodyContent}
-${summary}
-${bar}
+${renderReviewBody(card, parsed, opts)}
 </body>
 </html>`;
 }

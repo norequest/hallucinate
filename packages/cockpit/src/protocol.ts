@@ -1,4 +1,4 @@
-import type { AgentState } from "@maestro/core";
+import type { AgentState, ApprovalDetail, Diff, EngineCapabilitiesLite } from "@maestro/core";
 import type { ComposerOptions } from "./composer.js";
 
 /** Which column on the Conducting Board this card belongs to. */
@@ -13,15 +13,15 @@ export interface CardVM {
   /** Capped, accumulated `output` text the engine streamed. */
   output: string;
   summary?: string;
-  diff?: { files: string[]; patch: string };
+  diff?: Diff;
   diffError?: string;
   conflictFiles?: string[];
   error?: string;
   pendingApprovalId?: string;
   /** Human-readable detail of the pending approval; set while pendingApprovalId is set. */
-  approvalDetail?: { tool: string; description: string };
+  approvalDetail?: ApprovalDetail;
   /** Engine capabilities carried to the UI for graceful degradation. */
-  engineCapabilities?: { approvals: boolean; steerable: boolean };
+  engineCapabilities?: EngineCapabilitiesLite;
   /**
    * True when this card needs a human decision. Set by the core predicate
    * `stateNeedsAttention`, true for: awaiting-approval, done, error, conflict,
@@ -32,6 +32,8 @@ export interface CardVM {
   lane: Lane;
   /** The active task's description text. */
   taskDescription: string;
+  /** The agent's role instructions markdown (role .md), shown in the drawer Instructions tab. */
+  instructions?: string;
   /** The "why" from task.goal; shown as a faint italic line on the card. */
   goal?: string;
   /** Counts of added/deleted lines in the diff patch, excluding file headers. */
@@ -46,12 +48,34 @@ export interface CardVM {
   toolsCanWrite?: number;
   /** P4 anatomy: skill names attached to this agent. */
   skills?: string[];
+  /** Set when this agent was delegated by a lead: the lead agent's id, so the board can group it under the lead. */
+  parentId?: string;
+  /**
+   * True for a stream-derived fleet sub-agent: nested under its conductor, no own
+   * worktree/branch/session, and READ-ONLY. The board renders it without any
+   * action affordances (no Merge/Discard/Review/Approve/Steer); the conductor
+   * stays the single reviewable/mergeable unit.
+   */
+  virtual?: boolean;
+}
+
+/** A pending delegation: a lead asked to bring a teammate in, awaiting the conductor's approve/deny. */
+export interface DelegationVM {
+  id: string;
+  /** The lead agent that asked for this teammate. */
+  leadAgentId: string;
+  /** Teammate role the lead wants to spawn. */
+  roleName: string;
+  /** The self-contained subtask the teammate would receive. */
+  task: string;
 }
 
 /** The whole cockpit, a pure function of orchestrator events. `cards` are pre-ordered. */
 export interface CockpitState {
   cards: CardVM[];
   focusedId?: string;
+  /** Pending delegation proposals, in arrival order. Resolved ones are dropped. */
+  delegations: DelegationVM[];
 }
 
 /** Messages the extension host sends INTO the webview. */
@@ -62,6 +86,10 @@ export type HostToWebview =
 /** Messages the webview sends OUT to the extension host. */
 export type WebviewToHost =
   | { type: "ready" }
+  // The board "+ New task" button: the host decides the team funnel (launch a
+  // team, or steer the user to create a team / add agents) from a fresh read of
+  // .conductor/, since the webview can't reliably know team/agent counts.
+  | { type: "new-task" }
   | { type: "focus"; agentId: string }
   | { type: "spawn"; roleName: string; description: string; goal?: string }
   | { type: "steer"; agentId: string; input: string }
@@ -75,6 +103,11 @@ export type WebviewToHost =
   | { type: "create-pr"; agentId: string }
   | { type: "retry-cleanup"; agentId: string }
   | { type: "open-review"; agentId: string }
+  /** Discard and clear every ready-to-review (done) card from the board. */
+  | { type: "clear-done-lane" }
+  // Lead delegation approve/deny. These carry a delegation `id`, not an agentId.
+  | { type: "approve-delegation"; id: string }
+  | { type: "deny-delegation"; id: string }
   | {
       type: "dispatch";
       /** A registered/preset role to spawn. */
@@ -135,6 +168,8 @@ export function isWebviewMessage(msg: unknown): msg is WebviewToHost {
 
   switch (type) {
     case "ready":
+    case "new-task":
+    case "clear-done-lane":
       return true;
     case "focus":
     case "stop":
@@ -146,6 +181,9 @@ export function isWebviewMessage(msg: unknown): msg is WebviewToHost {
     case "retry-cleanup":
     case "open-review":
       return isString(m["agentId"]);
+    case "approve-delegation":
+    case "deny-delegation":
+      return isString(m["id"]);
     case "spawn":
       return isString(m["roleName"]) && isString(m["description"]) && (m["goal"] === undefined || isString(m["goal"]));
     case "steer":

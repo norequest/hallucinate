@@ -1,4 +1,13 @@
-import type { AgentEvent, AgentSession, ApprovalDecision, SoulDoc, Task, ToolGrant } from "@maestro/core";
+import type {
+  AgentEvent,
+  AgentSession,
+  ApprovalDecision,
+  Autonomy,
+  SkillRef,
+  SoulDoc,
+  Task,
+  ToolGrant,
+} from "@maestro/core";
 import { EventQueue, composePreamble, renderToolsForPreamble } from "@maestro/core";
 import { buildInitialize, buildPermissionResponse, buildUserTurn } from "./messages.js";
 import type { AcpApprovalDetail, AcpMessage, AcpTransport } from "./types.js";
@@ -17,13 +26,13 @@ const SAFE_TOOLS = new Set([
 export interface AcpSessionOptions {
   instructions: string;
   model?: string;
-  autonomy: "manual" | "auto-approve-safe" | "yolo";
+  autonomy: Autonomy;
   /** Optional soul doc resolved at spawn time. */
   soulDoc?: SoulDoc;
   /** Optional tool grant for the role. */
   tools?: ToolGrant;
-  /** Resolved skill bodies. */
-  skillBodies?: string[];
+  /** Resolved skills, advertised by name in the preamble (bodies not inlined). */
+  skills?: SkillRef[];
 }
 
 export class AcpSession implements AgentSession {
@@ -48,7 +57,7 @@ export class AcpSession implements AgentSession {
       soul: this.opts.soulDoc,
       instructions: this.opts.instructions,
       tools: renderToolsForPreamble(this.opts.tools),
-      skills: this.opts.skillBodies,
+      skills: this.opts.skills,
       task: "",
     });
     const initMsg = buildInitialize({

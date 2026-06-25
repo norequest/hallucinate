@@ -101,6 +101,69 @@ describe("loadConductorDir", () => {
     expect(result.config.maxParallelAgents).toBe(5);
   });
 
+  it("loads a config defaults block onto config.defaults", async () => {
+    const configWithDefaults = `
+maxParallelAgents: 3
+defaults:
+  instructions: Standing rule.
+  skills: []
+  leadSkills:
+    - task-coordination-strategies
+`.trim();
+    const fs = makeFakeFs({
+      [`${CONFIG_PATH}`]: configWithDefaults,
+      [`${ROOT}/.conductor`]: "",
+    });
+    const result = await loadConductorDir(ROOT, fs);
+    expect(result.config.defaults).toEqual({
+      instructions: "Standing rule.",
+      skills: [],
+      leadSkills: ["task-coordination-strategies"],
+    });
+  });
+
+  it("warns when a default skill name does not resolve against loaded skills", async () => {
+    const configWithDefaults = `
+maxParallelAgents: 3
+defaults:
+  leadSkills:
+    - ghost-skill
+`.trim();
+    const fs = makeFakeFs({
+      [`${CONFIG_PATH}`]: configWithDefaults,
+      [`${ROOT}/.conductor`]: "",
+    });
+    const result = await loadConductorDir(ROOT, fs);
+    const allWarnings = result.warnings.flatMap((w) => w.warnings);
+    expect(allWarnings.some((w) => w.field === "defaults.leadSkills" && w.message.includes("ghost-skill"))).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("does not warn when a default skill name resolves to a loaded skill", async () => {
+    const configWithDefaults = `
+maxParallelAgents: 3
+defaults:
+  leadSkills:
+    - task-coordination-strategies
+`.trim();
+    const skillMd = `---
+name: task-coordination-strategies
+description: How to delegate.
+---
+Body.
+`;
+    const fs = makeFakeFs({
+      [`${CONFIG_PATH}`]: configWithDefaults,
+      [`${ROOT}/.conductor/skills/task-coordination-strategies/SKILL.md`]: skillMd,
+      [`${ROOT}/.conductor`]: "",
+    });
+    const result = await loadConductorDir(ROOT, fs);
+    const skillWarnings = result.warnings
+      .flatMap((w) => w.warnings)
+      .filter((w) => w.field === "defaults.skills" || w.field === "defaults.leadSkills");
+    expect(skillWarnings).toHaveLength(0);
+  });
+
   it("collects errors on invalid YAML without throwing", async () => {
     const fs = makeFakeFs({
       [`${ROLES_DIR}/broken.yaml`]: "name: [unclosed",

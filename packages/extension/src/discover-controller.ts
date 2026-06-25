@@ -29,8 +29,9 @@ export interface DiscoverDeps {
   /** Return the live MCP inventory (already loaded by the extension host). */
   mcpInventory(): McpInventory;
   /**
-   * Open the Anatomy editor pre-filled with the adopt draft.
-   * The editor's Save button persists the role; the controller does NOT persist.
+   * Adopt the role: the host persists it to `.conductor/roles/`, refreshes the
+   * Library so the Agents tab lists it, then opens the Anatomy editor on the saved
+   * role for optional tuning. The controller itself never touches disk.
    */
   openAnatomyEditor(draft: AdoptDraft): void;
   /** Open the skill editor pre-filled with the discovered skill item. */
@@ -51,6 +52,9 @@ export function createDiscoverController(deps: DiscoverDeps): {
   /** Merged cache of all scanned items, keyed by item.source. */
   const cache = new Map<string, DiscoveredItem>();
 
+  /** Sources already adopted this session, so re-emits keep the card marked. */
+  const adopted = new Set<string>();
+
   /** MCP from the most recent scan. Falls back to deps.mcpInventory(). */
   let lastMcp: McpInventory = { servers: [] };
 
@@ -60,6 +64,7 @@ export function createDiscoverController(deps: DiscoverDeps): {
       items: Array.from(cache.values()),
       mcp,
       scanError,
+      adoptedSources: Array.from(adopted),
     });
   }
 
@@ -113,6 +118,10 @@ export function createDiscoverController(deps: DiscoverDeps): {
         const provenance = await buildProvenance(item);
         const draft = mapToRole(item, deps.mcpInventory(), provenance);
         deps.openAnatomyEditor(draft);
+        // Mark adopted and re-emit so the Discover card shows the adopted state
+        // (green tick) instead of still inviting another adopt.
+        adopted.add(item.source);
+        emitAll(lastMcp);
         return;
       }
 
@@ -122,6 +131,8 @@ export function createDiscoverController(deps: DiscoverDeps): {
         const provenance = await buildProvenance(item);
         await deps.writeSkill(item.name, item);
         deps.openSkillEditor(item, provenance);
+        adopted.add(item.source);
+        emitAll(lastMcp);
         return;
       }
 

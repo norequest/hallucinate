@@ -6,6 +6,14 @@ describe("isWebviewMessage runtime guard", () => {
     expect(isWebviewMessage({ type: "ready" })).toBe(true);
   });
 
+  it("accepts the bare new-task message (the board funnel trigger)", () => {
+    expect(isWebviewMessage({ type: "new-task" })).toBe(true);
+  });
+
+  it("accepts the bare clear-done-lane message (no agentId)", () => {
+    expect(isWebviewMessage({ type: "clear-done-lane" })).toBe(true);
+  });
+
   it("accepts a valid spawn message", () => {
     expect(isWebviewMessage({ type: "spawn", roleName: "Implementer", description: "fix it" })).toBe(true);
   });

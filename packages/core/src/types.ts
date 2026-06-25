@@ -1,3 +1,21 @@
+/** A reference to a skill: advertised by name in the preamble, body materialized into the worktree. */
+export interface SkillRef {
+  /** Skill folder name, e.g. "task-coordination-strategies". */
+  name: string;
+  /** One-line description from the skill's frontmatter, used to advertise it. */
+  description?: string;
+  /** Full original SKILL.md file text (frontmatter + body), for materialization into the worktree. */
+  content: string;
+}
+
+/** A Copilot custom-agent profile: a slug plus the full .agent.md text materialized into the worktree. */
+export interface AgentProfile {
+  /** The agent slug, e.g. "scribe". */
+  name: string;
+  /** The full .agent.md file text. */
+  content: string;
+}
+
 /** A unit of work assigned to a role. */
 export interface Task {
   id: string;
@@ -7,8 +25,10 @@ export interface Task {
   goal?: string;
   /** Resolved at spawn; not persisted. */
   soulDoc?: SoulDoc;
-  /** Resolved skill bodies at spawn; not persisted. */
-  skillBodies?: string[];
+  /** Resolved skills at spawn (advertised by name, materialized as files); not persisted. */
+  skills?: SkillRef[];
+  /** Agent profiles to materialize into this agent's worktree (.github/agents/<name>.agent.md); not persisted. */
+  agentProfiles?: AgentProfile[];
 }
 
 /** An isolated checkout an agent works in (real worktree comes in a later milestone). */
@@ -36,6 +56,20 @@ export interface Capabilities {
   approvals: boolean;
   steerable: boolean;
 }
+
+/**
+ * The capability subset carried onto an agent (and its card) so the UI can
+ * degrade without adapter access. The single source of truth for this shape;
+ * the cockpit `CardVM` reuses it rather than re-declaring it.
+ */
+export type EngineCapabilitiesLite = Pick<Capabilities, "approvals" | "steerable">;
+
+/**
+ * How much an agent may do without asking. The single source of truth for the
+ * autonomy levels; every other package imports this type (and the runtime
+ * `AUTONOMY_VALUES` companion in constants.ts) rather than re-spelling the union.
+ */
+export type Autonomy = "manual" | "auto-approve-safe" | "yolo";
 
 /** The lifecycle state of an agent, owned by the orchestrator. */
 export type AgentState =
@@ -65,7 +99,17 @@ export type AgentEvent =
   | { kind: "approval"; id: string; detail: unknown }
   | { kind: "status"; state: EngineState }
   | { kind: "done"; summary: string; diff?: Diff }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  // Fleet sub-agent lifecycle, emitted on a conductor's own session when its
+  // engine (e.g. Copilot's /fleet) runs named sub-agents inside one session.
+  // The orchestrator surfaces these as read-only virtual children; no process
+  // or worktree is created for them.
+  /** A named sub-agent started inside the conductor's session. callId is the engine's toolCallId used to correlate later events; name is the custom-agent name (e.g. "scribe-alpha"). */
+  | { kind: "subagent-started"; callId: string; name: string; description?: string }
+  /** Output text from a running sub-agent. callId correlates it to the subagent-started event. */
+  | { kind: "subagent-output"; callId: string; text: string }
+  /** A sub-agent finished. callId correlates it to the subagent-started event; summary is its closing note, if any. */
+  | { kind: "subagent-done"; callId: string; summary?: string };
 
 /** The renderable detail of a pending approval request from an engine. */
 export interface ApprovalDetail {
@@ -100,7 +144,7 @@ export interface Role {
   name: string;
   instructions: string;
   engine: { id: string; model?: string };
-  autonomy: "manual" | "auto-approve-safe" | "yolo";
+  autonomy: Autonomy;
   /** Names of skills resolved to .conductor/skills/<name>/SKILL.md at spawn. Additive; absent means none. */
   skills?: string[];
   /** Name of a soul file resolved to .conductor/souls/<soul>.md at spawn. */
@@ -121,6 +165,28 @@ export interface Team {
   roles: Role[];
   /** Names of skills inherited by all roles in this team at spawn. Additive; absent means none. */
   skills?: string[];
+  /**
+   * Role name (must be one of `roles`) that leads this team: the only member
+   * launched when the team is dispatched. The lead delegates to teammates via
+   * delegation directives. Defaults to the first role when absent.
+   */
+  lead?: string;
+}
+
+/**
+ * A lead's request to bring a teammate in, parsed from a ```delegate block in the
+ * lead's output. Pending until the conductor approves or denies it; approval
+ * spawns the teammate as a child of the lead.
+ */
+export interface DelegationProposal {
+  id: string;
+  /** The lead agent that asked for this teammate. */
+  leadAgentId: string;
+  /** Teammate role to spawn (a role in the lead's team, never the lead itself). */
+  roleName: string;
+  /** Self-contained subtask the teammate receives as its task description. */
+  task: string;
+  state: "pending" | "approved" | "denied";
 }
 
 /** A running instance of a role on a task. */
@@ -139,8 +205,12 @@ export interface Agent {
   /** Set when state === "awaiting-approval"; cleared when the approval is resolved. */
   approvalDetail?: ApprovalDetail;
   /** Capabilities carried from the adapter so the UI can degrade without adapter access. */
-  engineCapabilities?: { approvals: boolean; steerable: boolean };
+  engineCapabilities?: EngineCapabilitiesLite;
   workspace?: Workspace;
+  /** Set when this agent was delegated by a lead: the lead's agent id. */
+  parentId?: string;
+  /** True for a stream-derived fleet sub-agent: nested under its conductor, shares the conductor worktree, has no own engine session or branch, and is read-only (no merge/approve/steer). */
+  virtual?: boolean;
 }
 
 /** Minimal record persisted per agent so the orchestrator can rehydrate after a reload. */
@@ -157,17 +227,53 @@ export interface PersistedAgentRecord {
 export type OrchestratorEvent =
   | { kind: "agent-added"; agent: Agent }
   | { kind: "agent-updated"; agent: Agent }
-  | { kind: "agent-event"; agentId: string; event: AgentEvent };
+  | { kind: "agent-event"; agentId: string; event: AgentEvent }
+  /** A lead asked to bring a teammate in; pending the conductor's approval. */
+  | { kind: "delegation-proposed"; proposal: DelegationProposal }
+  /** A delegation moved out of pending (approved or denied). */
+  | { kind: "delegation-resolved"; proposal: DelegationProposal };
 
 export interface OrchestratorConfig {
   maxParallelAgents: number;
 }
 
+/**
+ * A config-driven DEFAULT layer composed into agent preambles at spawn.
+ * `instructions` and `skills` apply to EVERY agent (the general layer);
+ * `leadSkills` applies ONLY to the agent that holds a team roster (the lead).
+ * All fields optional, so an unset defaults block leaves spawn behavior unchanged.
+ */
+export interface AgentDefaults {
+  /** Standing instructions composed into EVERY agent (before the role's own). */
+  instructions?: string;
+  /** Skill names composed into EVERY agent. */
+  skills?: string[];
+  /** Skill names composed ONLY into the lead (the agent holding a team roster). */
+  leadSkills?: string[];
+}
+
 /** Per-dispatch overrides applied without mutating the registered Role. */
-export interface SpawnOptions { goal?: string; engineId?: string; model?: string; }
+export interface SpawnOptions {
+  goal?: string;
+  engineId?: string;
+  model?: string;
+  /** Prepended to the role's instructions for THIS agent only (e.g. a lead brief). */
+  instructionsPrefix?: string;
+  /** Links this agent to the lead that delegated it. */
+  parentId?: string;
+  /** Agent profiles materialized into the spawned agent's worktree (Copilot custom agents). */
+  agentProfiles?: AgentProfile[];
+  /**
+   * Internal spawn detail (NOT exposed on the public dispatch API): true only for
+   * the lead spawned by launchTeam. When true, defaults.leadSkills ride into the
+   * effective role on top of the general defaults. A plain dispatch never sets it,
+   * so a non-team agent gets only the general defaults, never leadSkills.
+   */
+  isLead?: boolean;
+}
 
 /** A single-agent dispatch: either a preset roleName or a free-text newRoleName, plus the task. */
 export interface DispatchSpec { roleName?: string; newRoleName?: string; engineId?: string; model?: string; goal?: string; description: string; }
 
 /** Async resolver injected by the extension to avoid fs imports in core. */
-export type PreambleResolver = (role: Role) => Promise<{ soulDoc?: SoulDoc; skillBodies?: string[] }>;
+export type PreambleResolver = (role: Role) => Promise<{ soulDoc?: SoulDoc; skills?: SkillRef[] }>;

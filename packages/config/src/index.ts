@@ -1,10 +1,12 @@
 export const MAESTRO_CONFIG_VERSION = "0.0.0";
+export * from "./paths.js";
 export * from "./types.js";
 export * from "./validator.js";
 export * from "./parser.js";
 export * from "./serializer.js";
 export * from "./loader.js";
 export * from "./scaffolder.js";
+export * from "./vendored-skills.js";
 export * from "./skill-types.js";
 export * from "./skill-parser.js";
 export * from "./skill-loader.js";

@@ -16,11 +16,11 @@ function waitForState(orch: Orchestrator, agentId: string, target: string): Prom
 }
 
 describe("Orchestrator preamble resolver", () => {
-  it("populates task.soulDoc and task.skillBodies when a resolver is set", async () => {
+  it("populates task.soulDoc and task.skills when a resolver is set", async () => {
     const fakeSoul: SoulDoc = { redLines: "never lie", raw: "## Red lines\nnever lie" };
     const resolver: PreambleResolver = vi.fn(async () => ({
       soulDoc: fakeSoul,
-      skillBodies: ["skill body A"],
+      skills: [{ name: "skill-a", description: "Do A.", content: "## skill-a\nskill body A" }],
     }));
 
     const adapter = new FakeEngineAdapter({ script: [{ kind: "done", summary: "ok" }] });
@@ -32,15 +32,17 @@ describe("Orchestrator preamble resolver", () => {
     const agent = orch.spawn("R", "my task");
     await waitForState(orch, agent.id, "done");
 
-    // The task passed to the adapter must have soulDoc and skillBodies populated
+    // The task passed to the adapter must have soulDoc and skills populated
     expect(adapter.startedTasks).toHaveLength(1);
     const started = adapter.startedTasks[0]!;
     expect(started.soulDoc).toEqual(fakeSoul);
-    expect(started.skillBodies).toEqual(["skill body A"]);
+    expect(started.skills).toEqual([
+      { name: "skill-a", description: "Do A.", content: "## skill-a\nskill body A" },
+    ]);
     expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ name: "R" }));
   });
 
-  it("leaves soulDoc and skillBodies undefined when no resolver is set", async () => {
+  it("leaves soulDoc and skills undefined when no resolver is set", async () => {
     const adapter = new FakeEngineAdapter({ script: [{ kind: "done", summary: "ok" }] });
     const orch = new Orchestrator({ maxParallelAgents: 1 }, new FakeWorkspaceProvider());
     orch.registerAdapter(adapter);
@@ -52,7 +54,7 @@ describe("Orchestrator preamble resolver", () => {
 
     const started = adapter.startedTasks[0]!;
     expect(started.soulDoc).toBeUndefined();
-    expect(started.skillBodies).toBeUndefined();
+    expect(started.skills).toBeUndefined();
   });
 
   it("continues without soul/skills when resolver throws", async () => {
@@ -68,6 +70,6 @@ describe("Orchestrator preamble resolver", () => {
 
     const started = adapter.startedTasks[0]!;
     expect(started.soulDoc).toBeUndefined();
-    expect(started.skillBodies).toBeUndefined();
+    expect(started.skills).toBeUndefined();
   });
 });
