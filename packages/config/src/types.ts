@@ -24,17 +24,17 @@ export interface ValidationWarning {
  * Engine ids known at build time. These are the only adapters Hallucinate will ever
  * spawn. A role naming any other engine.id is REJECTED at validation time
  * (Issue 28 / S9): an adapter command/binary must never be sourced from
- * .conductor/ config, so an unknown id cannot be honored.
+ * .hallucinate/ config, so an unknown id cannot be honored.
  *
  * Derived from the core constants (the single source of truth). FLEET_ENGINE_ID
  * is deliberately omitted: it is launch-injected and internal, never authored in
- * .conductor/, so a role naming it must still be rejected here.
+ * .hallucinate/, so a role naming it must still be rejected here.
  */
 export const KNOWN_ENGINE_IDS = new Set<string>([COPILOT_ENGINE_ID, ACP_ENGINE_ID]);
 
 /**
  * The config object the loader returns: the core `OrchestratorConfig` plus the
- * optional config-driven `defaults` layer parsed from `.conductor/config.yaml`.
+ * optional config-driven `defaults` layer parsed from `.hallucinate/config.yaml`.
  *
  * `defaults` is kept here (not on the core type) so the config package owns the
  * shape it parses/serializes. It is optional, so an absent `defaults` block is

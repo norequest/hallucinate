@@ -145,9 +145,9 @@ export interface Role {
   instructions: string;
   engine: { id: string; model?: string };
   autonomy: Autonomy;
-  /** Names of skills resolved to .conductor/skills/<name>/SKILL.md at spawn. Additive; absent means none. */
+  /** Names of skills resolved to .hallucinate/skills/<name>/SKILL.md at spawn. Additive; absent means none. */
   skills?: string[];
-  /** Name of a soul file resolved to .conductor/souls/<soul>.md at spawn. */
+  /** Name of a soul file resolved to .hallucinate/souls/<soul>.md at spawn. */
   soul?: string;
   /** Tool grants for this role; absence of a write entry means read-only. */
   tools?: ToolGrant;

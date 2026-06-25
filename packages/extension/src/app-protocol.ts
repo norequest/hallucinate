@@ -59,7 +59,7 @@ export interface TaskComposerTeam {
 
 /**
  * Host -> webview: open the in-page task composer (the "+ New task" funnel). Sent
- * by the board after a FRESH read of .conductor/. TEAMS are the unit of a task
+ * by the board after a FRESH read of .hallucinate/. TEAMS are the unit of a task
  * run, so the composer is ONE in-page surface (no native OS dropdown) offering
  * ONLY team selection: a chip selector picks one of `teams` (the first preselected)
  * and a textarea collects the task. On submit the webview posts

@@ -46,11 +46,11 @@ export interface ConfigGateway {
   setRoleSkills(roleName: string, skills: string[]): Promise<void>;
   /** Seed a default role file so subsequent anatomy edits have something to load. */
   seedRole(seed: NewRoleSeed): Promise<void>;
-  /** Delete a role: remove the single .conductor/roles/<base>.yaml file. */
+  /** Delete a role: remove the single .hallucinate/roles/<base>.yaml file. */
   deleteRole(name: string): Promise<void>;
-  /** Write a team: serialize name + member role names to .conductor/teams/<base>.yaml. */
+  /** Write a team: serialize name + member role names to .hallucinate/teams/<base>.yaml. */
   writeTeam(team: { name: string; roleNames: string[] }): Promise<void>;
-  /** Delete a team: remove the single .conductor/teams/<base>.yaml file. */
+  /** Delete a team: remove the single .hallucinate/teams/<base>.yaml file. */
   deleteTeam(name: string): Promise<void>;
 }
 

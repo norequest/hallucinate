@@ -352,7 +352,7 @@ function homeHtml(hasFolder: boolean, nonce: string): string {
     <!-- Action cards -->
     <nav class="menu" aria-label="Hallucinate actions">
 
-      <!-- Primary: Open Conducting Board -->
+      <!-- Primary: Open Board -->
       <a class="card card--primary" role="button" tabindex="0" data-command="hallucinate.openStage">
         <span class="card-icon" aria-hidden="true">
           <svg viewBox="0 0 16 16" fill="none">
@@ -364,7 +364,7 @@ function homeHtml(hasFolder: boolean, nonce: string): string {
         </span>
         <span class="card-body">
           <span class="eyebrow">Start here</span>
-          <span class="card-title">Open Conducting Board</span>
+          <span class="card-title">Open Board</span>
           <span class="card-desc">Watch and steer your agents.</span>
         </span>
       </a>

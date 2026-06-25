@@ -14,7 +14,7 @@ import type { Role, Team } from "@hallucinate/core";
  * An empty roster is fine: the team is just `[conductor]`. The conductor still
  * runs, it simply has no specialists to delegate to.
  */
-export function buildConductorTeam(name: string, roster: Role[], conductor: Role): Team {
+export function buildLeadTeam(name: string, roster: Role[], conductor: Role): Team {
   const rest = roster.filter((r) => r.name !== conductor.name);
   return {
     name,
@@ -24,7 +24,7 @@ export function buildConductorTeam(name: string, roster: Role[], conductor: Role
 }
 
 /** The injectable orchestrator seam a conductor-led team launch needs. */
-export interface ConductorTeamDeps {
+export interface LeadTeamDeps {
   /** Register a role with the orchestrator (idempotent: overwrites by name). */
   registerRole: (role: Role) => void;
   /** Launch the assembled conductor-led team with auto-approve on. */
@@ -41,15 +41,15 @@ export interface ConductorTeamDeps {
  * Pure of vscode so it is unit-testable against a spy orchestrator; the extension
  * wires the real Orchestrator in.
  */
-export function launchConductorTeam(
+export function launchLeadTeam(
   selectedTeam: Team,
   task: string,
   conductor: Role,
-  deps: ConductorTeamDeps,
+  deps: LeadTeamDeps,
 ): void {
-  const conductorTeam = buildConductorTeam(selectedTeam.name, selectedTeam.roles, conductor);
+  const leadTeam = buildLeadTeam(selectedTeam.name, selectedTeam.roles, conductor);
   // Register every member (the conductor + each scoped specialist) so delegations
   // resolve by name. registerRole is idempotent.
-  for (const role of conductorTeam.roles) deps.registerRole(role);
-  deps.launchTeam(conductorTeam, task, { autoApprove: true });
+  for (const role of leadTeam.roles) deps.registerRole(role);
+  deps.launchTeam(leadTeam, task, { autoApprove: true });
 }

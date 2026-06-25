@@ -1,4 +1,4 @@
-import { loadConductorDir, KNOWN_ENGINE_IDS, type FsReader } from "@hallucinate/config";
+import { loadHallucinateDir, KNOWN_ENGINE_IDS, type FsReader } from "@hallucinate/config";
 import type { Role, Team } from "@hallucinate/core";
 
 export interface ComposerData {
@@ -8,11 +8,11 @@ export interface ComposerData {
 }
 
 /**
- * Loads the .conductor/ directory and maps the result to the shape the
+ * Loads the .hallucinate/ directory and maps the result to the shape the
  * composer panel expects. Vscode-free: inject any FsReader for testing.
  */
 export async function loadComposerData(repoRoot: string, fs: FsReader): Promise<ComposerData> {
-  const loaded = await loadConductorDir(repoRoot, fs);
+  const loaded = await loadHallucinateDir(repoRoot, fs);
   return {
     roles: loaded.roles,
     teams: loaded.teams,

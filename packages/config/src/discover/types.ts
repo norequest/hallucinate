@@ -12,7 +12,7 @@ export type Confidence = "verified" | "likely" | "instructions";
  */
 export type SourceKind =
   | "claude-agent"
-  | "conductor-role"
+  | "hallucinate-role"
   | "copilot-agent"
   | "copilot-chatmode"
   | "prompt"

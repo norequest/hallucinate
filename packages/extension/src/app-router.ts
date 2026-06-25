@@ -1,5 +1,5 @@
 /**
- * The single inbound dispatcher for the one "Conducting Board" panel, extracted
+ * The single inbound dispatcher for the one "Board" panel, extracted
  * as a PURE factory (no vscode, no node) so it unit-tests against fake handlers.
  *
  * Every webview message is an AppToHost (already guarded by isAppMessage at the

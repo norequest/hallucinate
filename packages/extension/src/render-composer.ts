@@ -15,7 +15,7 @@ function eqMark(extraClass = ""): string {
  */
 function renderPresets(options: ComposerOptions): string {
   if (options.presets.length === 0) {
-    return `<p class="composer-no-presets">No roles defined in .conductor/roles/. Enter a name below to create an ad-hoc role.</p>`;
+    return `<p class="composer-no-presets">No roles defined in .hallucinate/roles/. Enter a name below to create an ad-hoc role.</p>`;
   }
   const chips = options.presets
     .map(

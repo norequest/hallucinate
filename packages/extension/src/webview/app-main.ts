@@ -700,7 +700,7 @@ window.addEventListener("message", (e: MessageEvent<HostToApp>) => {
       setView(data.view);
       break;
     case "open-task-composer": {
-      // The "+ New task" funnel. The host read .conductor/ fresh and sent the
+      // The "+ New task" funnel. The host read .hallucinate/ fresh and sent the
       // hand-built teams. TEAMS are the unit of a task run: open ONE in-page
       // composer offering ONLY team selection (no native OS dropdown, no
       // standalone default agent). Picking a team launches it with the conductor
@@ -817,7 +817,7 @@ document.addEventListener("keydown", (e) => {
   }
 
   // (3) Full-page review: Escape is the keyboard twin of the Back button, so the
-  // conductor is never stranded off the Conducting Board.
+  // conductor is never stranded off the Board.
   if (view === "review") {
     backToBoard();
   }
@@ -908,7 +908,7 @@ function handleComposerClick(target: HTMLElement): boolean {
 // ─── Board click delegation (ported from main.ts) ──────────────────────────────
 
 function handleBoardClick(target: HTMLElement): void {
-  // "+ New task" button: the host reads .conductor/ fresh and replies with
+  // "+ New task" button: the host reads .hallucinate/ fresh and replies with
   // open-task-composer carrying the hand-built teams. We then open the in-page
   // task composer (team chip selector + task textarea), or a create-team CTA
   // when there are no teams.

@@ -98,7 +98,7 @@ export class GitWorkspaceManager implements WorkspaceManager {
     if (baseSlug.length === 0) {
       throw new Error(`Agent id "${agentId}" produces an empty slug and cannot be a branch name`);
     }
-    const worktreesRoot = path.join(this.repoRoot, ".conductor", "wt");
+    const worktreesRoot = path.join(this.repoRoot, ".hallucinate", "wt");
     const baseSha = (await this.git(["rev-parse", "HEAD"])).trim();
     // Clear worktree registrations whose directories are already gone, so a path
     // freed by a previous session can be reused before we try to add it.

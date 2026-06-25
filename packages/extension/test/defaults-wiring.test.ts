@@ -30,7 +30,7 @@ describe("defaults wiring in extension.ts (source)", () => {
     expect(extensionSrc).toMatch(/applyDefaults\(orch,\s*loaded\.config\)/);
   });
 
-  it("scaffolds .conductor on the team-launch path so the lead's playbook lands on disk", () => {
+  it("scaffolds .hallucinate on the team-launch path so the lead's playbook lands on disk", () => {
     // launchTeamByName must best-effort scaffold before loading, so a fresh repo
     // gets config.yaml (with defaults) + the vendored coordination SKILL.md files.
     const launchStart = extensionSrc.indexOf("const launchTeamByName");
@@ -48,8 +48,8 @@ describe("defaults wiring in extension.ts (source)", () => {
     );
   });
 
-  it("ensures the vendored skills on the team-launch path even when .conductor already exists", () => {
-    // After the best-effort scaffold (which no-ops on an existing .conductor),
+  it("ensures the vendored skills on the team-launch path even when .hallucinate already exists", () => {
+    // After the best-effort scaffold (which no-ops on an existing .hallucinate),
     // launchTeamByName must still ensure the three coordination skills land on
     // disk so the lead's playbook resolves to real SKILL.md files, not prompt text.
     const launchStart = extensionSrc.indexOf("const launchTeamByName");
@@ -60,7 +60,7 @@ describe("defaults wiring in extension.ts (source)", () => {
   });
 
   it("ensures the vendored skills at activation (setupConducting) so they appear without a launch", () => {
-    // The user's workspace already has a .conductor, so scaffoldIfMissing never
+    // The user's workspace already has a .hallucinate, so scaffoldIfMissing never
     // writes the skills. setupConducting must ensure them at activation time so the
     // three coordination SKILL.md files exist on disk before any team is launched.
     const setupStart = extensionSrc.indexOf("async function setupConducting");

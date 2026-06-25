@@ -118,8 +118,8 @@ function parseClaude(text: string, source: string): DiscoveredItem {
   };
 }
 
-/** Parser for .conductor/roles/*.yaml (already-valid conductor role files) */
-function parseConductorRole(text: string, source: string): DiscoveredItem {
+/** Parser for .hallucinate/roles/*.yaml (already-valid conductor role files) */
+function parseHallucinateRole(text: string, source: string): DiscoveredItem {
   let raw: unknown;
   try {
     raw = parseYaml(text);
@@ -141,8 +141,8 @@ function parseConductorRole(text: string, source: string): DiscoveredItem {
   const engineHint = engineId || "acp";
 
   return {
-    kind: "conductor-role",
-    confidence: classify("conductor-role"),
+    kind: "hallucinate-role",
+    confidence: classify("hallucinate-role"),
     name,
     description,
     body: description,
@@ -325,7 +325,7 @@ function parseInstructions(text: string, source: string): DiscoveredItem {
 
 const PARSERS: Record<SourceKind, (text: string, source: string) => DiscoveredItem> = {
   "claude-agent": parseClaude,
-  "conductor-role": parseConductorRole,
+  "hallucinate-role": parseHallucinateRole,
   "copilot-agent": parseCopilotAgent,
   "copilot-chatmode": parseCopilotChatmode,
   "prompt": parsePrompt,

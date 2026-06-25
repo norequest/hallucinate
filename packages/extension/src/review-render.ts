@@ -130,10 +130,10 @@ function reviewHeader(card: CardVM, opts: ReviewOpts): string {
   // branch on the review data (e.g. card.branch), render that instead of the slug.
   const branchChip = `<span class="rv-branch">${BRANCH_ICON}<span>agent/${escapeHtml(slug)}</span> <span style="color:${C.eyebrow}">&rarr; main</span></span>`;
 
-  // Always-available escape back to the Conducting Board. Opening the full review
+  // Always-available escape back to the Board. Opening the full review
   // replaces the whole board in the single-page panel, so without this the
   // conductor is stranded (the webview wires data-action="review-close").
-  const back = `<button class="rv-back" data-action="review-close" type="button">&larr; Conducting Board</button>`;
+  const back = `<button class="rv-back" data-action="review-close" type="button">&larr; Board</button>`;
 
   return `<header class="rv-header">
   ${back}

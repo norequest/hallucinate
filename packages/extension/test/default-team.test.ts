@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Role, Team } from "@hallucinate/core";
-import { buildConductorTeam, launchConductorTeam } from "../src/default-team.js";
+import { buildLeadTeam, launchLeadTeam } from "../src/default-team.js";
 
 const role = (name: string): Role => ({
   name,
@@ -17,16 +17,16 @@ const conductor: Role = {
   skills: ["task-coordination-strategies"],
 };
 
-describe("buildConductorTeam", () => {
+describe("buildLeadTeam", () => {
   it("makes the conductor the lead and lists it first", () => {
-    const team = buildConductorTeam("Backend", [role("Reviewer")], conductor);
+    const team = buildLeadTeam("Backend", [role("Reviewer")], conductor);
     expect(team.name).toBe("Backend");
     expect(team.lead).toBe(conductor.name);
     expect(team.roles[0]).toBe(conductor);
   });
 
   it("lists the conductor first, then the roster in input order", () => {
-    const team = buildConductorTeam("T", [role("Reviewer"), role("Builder")], conductor);
+    const team = buildLeadTeam("T", [role("Reviewer"), role("Builder")], conductor);
     expect(team.roles.map((r) => r.name)).toEqual(["Conductor", "Reviewer", "Builder"]);
     // The first role IS the conductor definition (not a look-alike).
     expect(team.roles[0]).toBe(conductor);
@@ -34,7 +34,7 @@ describe("buildConductorTeam", () => {
 
   it("includes every roster role", () => {
     const roster = [role("Reviewer"), role("Builder"), role("Tester")];
-    const team = buildConductorTeam("T", roster, conductor);
+    const team = buildLeadTeam("T", roster, conductor);
     for (const r of roster) {
       expect(team.roles.map((x) => x.name)).toContain(r.name);
     }
@@ -42,7 +42,7 @@ describe("buildConductorTeam", () => {
 
   it("dedupes a roster role sharing the conductor's name (conductor wins, listed once, stays first)", () => {
     const lookAlike = role("Conductor"); // same name as conductor, different instructions
-    const team = buildConductorTeam("T", [lookAlike, role("Reviewer")], conductor);
+    const team = buildLeadTeam("T", [lookAlike, role("Reviewer")], conductor);
     expect(team.roles.map((r) => r.name)).toEqual(["Conductor", "Reviewer"]);
     // The retained "Conductor" is the authoritative conductor, not the dup.
     expect(team.roles[0]).toBe(conductor);
@@ -51,13 +51,13 @@ describe("buildConductorTeam", () => {
   });
 
   it("works with an empty roster (team = [conductor])", () => {
-    const team = buildConductorTeam("T", [], conductor);
+    const team = buildLeadTeam("T", [], conductor);
     expect(team.roles).toEqual([conductor]);
     expect(team.lead).toBe(conductor.name);
   });
 });
 
-describe("launchConductorTeam", () => {
+describe("launchLeadTeam", () => {
   /** A spy orchestrator seam mirroring the real Orchestrator's relevant methods. */
   function spyOrch() {
     const registered: string[] = [];
@@ -76,7 +76,7 @@ describe("launchConductorTeam", () => {
   it("builds a conductor-led team: conductor is lead and first, the team's roles follow, autoApprove on", () => {
     const orch = spyOrch();
     const team: Team = { name: "Backend", roles: [role("ApiDev"), role("DbDev")] };
-    launchConductorTeam(team, "wire the endpoint", conductor, orch.deps);
+    launchLeadTeam(team, "wire the endpoint", conductor, orch.deps);
 
     expect(orch.launches).toHaveLength(1);
     const [call] = orch.launches;
@@ -95,7 +95,7 @@ describe("launchConductorTeam", () => {
     const orch = spyOrch();
     // The team hand-declares a specialist as its lead. It must be ignored.
     const team: Team = { name: "Backend", roles: [role("ApiDev"), role("DbDev")], lead: "DbDev" };
-    launchConductorTeam(team, "task", conductor, orch.deps);
+    launchLeadTeam(team, "task", conductor, orch.deps);
 
     const [call] = orch.launches;
     expect(call!.team.lead).toBe(conductor.name);
@@ -106,7 +106,7 @@ describe("launchConductorTeam", () => {
   it("registers the conductor and every team role before launching", () => {
     const orch = spyOrch();
     const team: Team = { name: "Backend", roles: [role("ApiDev"), role("DbDev")] };
-    launchConductorTeam(team, "task", conductor, orch.deps);
+    launchLeadTeam(team, "task", conductor, orch.deps);
     expect(orch.registered).toEqual(["Conductor", "ApiDev", "DbDev"]);
   });
 });

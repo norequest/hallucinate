@@ -1,11 +1,11 @@
 import type { AgentProfile, Role, SpawnOptions, Team } from "@hallucinate/core";
 import { COPILOT_ENGINE_ID, FLEET_ENGINE_ID } from "@hallucinate/core";
-import { buildConductorTeam } from "./default-team.js";
+import { buildLeadTeam } from "./default-team.js";
 
 // COPILOT_ENGINE_ID and FLEET_ENGINE_ID are defined once in @hallucinate/core (the
 // orchestrator owns the adapter-routing ids) and re-exported here for the
 // existing importers (extension.ts, tests). FLEET_ENGINE_ID is INTERNAL: the
-// conductor role's engine id is rewritten to it at launch (see toFleetConductor)
+// conductor role's engine id is rewritten to it at launch (see toFleetLead)
 // so the orchestrator's adapter lookup (`adapters.get(role.engine.id)`) routes
 // the conductor to the fleet adapter and everyone else to the plain "copilot"
 // adapter. Nothing the user authors ever names it.
@@ -29,7 +29,7 @@ export function usesFleet(conductor: Role): boolean {
  * it to the fleet adapter. Everything else (name, instructions, autonomy, skills,
  * model) is preserved; only `engine.id` changes. Pure: never mutates the input.
  */
-export function toFleetConductor(conductor: Role): Role {
+export function toFleetLead(conductor: Role): Role {
   return { ...conductor, engine: { ...conductor.engine, id: FLEET_ENGINE_ID } };
 }
 
@@ -104,7 +104,7 @@ export interface FleetTeamDeps {
 /**
  * Launch a COPILOT conducting run in FLEET single-session mode.
  *
- * Unlike {@link launchConductorTeam} (the delegate/spawn model kept for ACP and
+ * Unlike {@link launchLeadTeam} (the delegate/spawn model kept for ACP and
  * any non-Copilot lead), this:
  *   - spawns ONLY the conductor (one `copilot` process), never a process per
  *     teammate; the conductor's `/fleet` run dispatches the teammates as
@@ -134,13 +134,13 @@ export async function launchFleetTeam(
   // Assemble the conductor-led team the same way the delegate path does (conductor
   // first + lead, then the scoped roster, deduped). The teammates are everyone but
   // the conductor.
-  const conductorTeam = buildConductorTeam(selectedTeam.name, selectedTeam.roles, conductor);
-  const teammates = conductorTeam.roles.filter((r) => r.name !== conductor.name);
+  const leadTeam = buildLeadTeam(selectedTeam.name, selectedTeam.roles, conductor);
+  const teammates = leadTeam.roles.filter((r) => r.name !== conductor.name);
 
   // The conductor runs on the FLEET adapter; the teammates keep their own engine
   // ids (they are never spawned as processes here, only advertised so the fleet
   // orchestrator can name them).
-  const fleetConductor = toFleetConductor(conductor);
+  const fleetLead = toFleetLead(conductor);
 
   // Build each TEAMMATE's `.agent.md` profile so it can be materialized into the
   // conductor's worktree (see spawn below). The profile's slug name uses the SAME
@@ -161,7 +161,7 @@ export async function launchFleetTeam(
 
   // Register the conductor (on the fleet engine) and every teammate so any later
   // name resolution finds them. registerRole is idempotent.
-  deps.registerRole(fleetConductor);
+  deps.registerRole(fleetLead);
   for (const role of teammates) deps.registerRole(role);
 
   // Spawn ONLY the conductor, with the `/fleet ...` prompt as its task and the
@@ -169,5 +169,5 @@ export async function launchFleetTeam(
   // into the conductor's worktree. The teammate roster is advertised in the prompt
   // (by slug) so the built-in `/fleet` orchestrator can dispatch them in-session.
   const description = buildFleetPrompt(task, teammates, deps.slugFor);
-  deps.spawn(fleetConductor.name, description, { agentProfiles: profiles });
+  deps.spawn(fleetLead.name, description, { agentProfiles: profiles });
 }

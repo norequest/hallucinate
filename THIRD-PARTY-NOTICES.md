@@ -28,7 +28,7 @@ The adapted skills derived from wshobson/agents are:
 These ship in the repository under:
 
 - `packages/config/src/vendored-skills.ts` (the canonical adapted skill bodies)
-- `packages/extension/.conductor/skills/<skill>/SKILL.md`
+- `packages/extension/.hallucinate/skills/<skill>/SKILL.md`
 - `packages/extension/.github/skills/<skill>/SKILL.md`
 
 ### MIT License (wshobson/agents)

@@ -26,10 +26,10 @@ export interface AnatomyGateway {
   loadSoulBody(roleName: string): Promise<string>;
   /** Returns declared requirements (allowedTools) for each known skill. */
   loadSkillRequirements(): Promise<{ name: string; allowedTools?: string[] }[]>;
-  /** Serialize and write the role to .conductor/roles/<name>.yaml. */
+  /** Serialize and write the role to .hallucinate/roles/<name>.yaml. */
   writeRole(role: Role): Promise<void>;
   /**
-   * Write the soul body to .conductor/souls/<roleName>.md.
+   * Write the soul body to .hallucinate/souls/<roleName>.md.
    * Also sets role.soul to the roleName if it was absent, then writes the role.
    */
   writeSoul(roleName: string, body: string): Promise<void>;

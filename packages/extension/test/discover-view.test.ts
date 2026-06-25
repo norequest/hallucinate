@@ -420,8 +420,8 @@ describe("selectDiscover — engineId derivation", () => {
     expect(card.engineId).toBe("copilot");
   });
 
-  it("no engineHint on conductor-role kind → engineId acp", () => {
-    const items = [makeItem({ kind: "conductor-role" })];
+  it("no engineHint on hallucinate-role kind → engineId acp", () => {
+    const items = [makeItem({ kind: "hallucinate-role" })];
     const vm = selectDiscover(items, "", "all", false);
     const card = vm.groups.find((g) => g.group === "in-repo")!.cards[0]!;
     expect(card.engineId).toBe("acp");

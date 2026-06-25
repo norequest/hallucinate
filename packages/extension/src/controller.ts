@@ -132,7 +132,7 @@ export function createCockpit(
           break;
         case "new-task":
           // The "+ New task" funnel is handled entirely host-side (it needs a
-          // fresh .conductor/ read + orchestrator/stage access). It never drives
+          // fresh .hallucinate/ read + orchestrator/stage access). It never drives
           // the cockpit model, so it is a no-op here; this case keeps the switch
           // exhaustive over WebviewToHost.
           break;

@@ -1,7 +1,7 @@
 import type { AgentState, ApprovalDetail, Diff, EngineCapabilitiesLite } from "@hallucinate/core";
 import type { ComposerOptions } from "./composer.js";
 
-/** Which column on the Conducting Board this card belongs to. */
+/** Which column on the Board this card belongs to. */
 export type Lane = "working" | "needsYou" | "conflict" | "done";
 
 /** A single agent's renderable state in the cockpit. Pure data; the UI renders it verbatim. */
@@ -28,7 +28,7 @@ export interface CardVM {
    * detached, merge-cleanup-failed.
    */
   attention: boolean;
-  /** Which lane on the Conducting Board this card belongs to. */
+  /** Which lane on the Board this card belongs to. */
   lane: Lane;
   /** The active task's description text. */
   taskDescription: string;
@@ -88,7 +88,7 @@ export type WebviewToHost =
   | { type: "ready" }
   // The board "+ New task" button: the host decides the team funnel (launch a
   // team, or steer the user to create a team / add agents) from a fresh read of
-  // .conductor/, since the webview can't reliably know team/agent counts.
+  // .hallucinate/, since the webview can't reliably know team/agent counts.
   | { type: "new-task" }
   | { type: "focus"; agentId: string }
   | { type: "spawn"; roleName: string; description: string; goal?: string }

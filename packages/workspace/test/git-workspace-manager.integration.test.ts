@@ -86,7 +86,7 @@ describe("GitWorkspaceManager (real git)", () => {
     expect(result.status).toBe("conflict");
     if (result.status === "conflict") expect(result.files).toContain("file.txt");
     // repo has no merge in progress after abort (MERGE_HEAD must not exist).
-    // Note: the .conductor/ directory may remain as an untracked entry in the
+    // Note: the .hallucinate/ directory may remain as an untracked entry in the
     // working tree; that is normal and harmless. We filter it out and assert
     // there are no staged/conflict lines (lines NOT starting with "??").
     const porcelain = git(repo, "status", "--porcelain")

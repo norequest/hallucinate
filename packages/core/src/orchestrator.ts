@@ -212,7 +212,7 @@ export class Orchestrator {
     if (spec.newRoleName) {
       const role: Role = {
         name: spec.newRoleName,
-        instructions: `Ad-hoc role dispatched from the Conducting Board. ${spec.description}`,
+        instructions: `Ad-hoc role dispatched from the Board. ${spec.description}`,
         engine: {
           id: spec.engineId ?? "copilot",
           ...(spec.model !== undefined ? { model: spec.model } : {}),

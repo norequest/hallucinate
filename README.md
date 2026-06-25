@@ -37,11 +37,11 @@ Hallucinate dispatches agents to your own engine CLIs (GitHub Copilot, Gemini/AC
    code --install-extension norequest.hallucinate
    ```
 2. Open a folder that is a git repository.
-3. Click the Hallucinate icon in the activity bar to open the Conducting Board (or run "Hallucinate: Open Conducting Board").
+3. Click the Hallucinate icon in the activity bar to open the Board (or run "Hallucinate: Open Board").
 4. Dispatch an agent: pick a role, write the task, and send it. The agent gets a fresh worktree and streams live on the board.
 5. When it finishes, open the diff and Merge, Discard, or Send back with feedback. With PR mode on, open a pull request instead.
 
-Roles, teams, and skills live in a `.conductor/` directory in your workspace, which Hallucinate scaffolds on first run.
+Roles, teams, and skills live in a `.hallucinate/` directory in your workspace, which Hallucinate scaffolds on first run.
 
 ## Development
 
@@ -72,8 +72,8 @@ A running Extension Development Host does not pick up a rebuild on its own: clos
 ### Concepts
 
 - Agent: one running engine working on one task. On the board it is a card.
-- Role: a reusable agent definition (engine, instructions, tools, skills, soul, autonomy). Lives in `.conductor/roles/`.
-- Team: a named group of roles with a designated lead. Lives in `.conductor/teams/`.
+- Role: a reusable agent definition (engine, instructions, tools, skills, soul, autonomy). Lives in `.hallucinate/roles/`.
+- Team: a named group of roles with a designated lead. Lives in `.hallucinate/teams/`.
 - Skill: a reusable instruction packet you can attach to a role.
 - Soul: an optional persona document a role references.
 - Worktree: the isolated `git worktree` (its own branch) an agent works in.
@@ -96,13 +96,13 @@ Trade-off: fleet gives you one shared context and one combined diff. Isolated mo
 - `hallucinate.prDraft`: open pull requests as drafts when PR mode is on. Default `false`.
 - `hallucinate.discoverPlugins`: scan installed Copilot plugins during discovery. Default `false`.
 
-`config.yaml` in `.conductor/` controls workspace defaults, including `maxParallelAgents` (how many agents run at once; the rest queue).
+`config.yaml` in `.hallucinate/` controls workspace defaults, including `maxParallelAgents` (how many agents run at once; the rest queue).
 
 </details>
 
 ## Contributing
 
-Hallucinate is pre-release and very much open to contributions. If you hit a bug, have an idea, or just have a question, please open a GitHub issue at https://github.com/norequest/hallucinate/issues. That is the best place to start a conversation, whether it is about an engine adapter, the Conducting Board UI, or the orchestration core. Pull requests are welcome too, and opening an issue first is a great way to make sure the change lands cleanly.
+Hallucinate is pre-release and very much open to contributions. If you hit a bug, have an idea, or just have a question, please open a GitHub issue at https://github.com/norequest/hallucinate/issues. That is the best place to start a conversation, whether it is about an engine adapter, the Board UI, or the orchestration core. Pull requests are welcome too, and opening an issue first is a great way to make sure the change lands cleanly.
 
 ## License
 

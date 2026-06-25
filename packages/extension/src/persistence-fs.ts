@@ -4,7 +4,7 @@ import { isSafeAgentId, safeAgentFileName, type PersistenceBackend } from "./per
 
 /**
  * Production backend: one JSONL file per agent under
- * `.conductor/.runtime/<agentId>.jsonl` in the workspace root. The directory is
+ * `.hallucinate/.runtime/<agentId>.jsonl` in the workspace root. The directory is
  * gitignored and created lazily on first write.
  *
  * Security note: these logs persist raw agent scrollback (model output and tool
@@ -15,7 +15,7 @@ export class FsPersistenceBackend implements PersistenceBackend {
   private readonly dir: string;
 
   constructor(repoRoot: string) {
-    this.dir = join(repoRoot, ".conductor", ".runtime");
+    this.dir = join(repoRoot, ".hallucinate", ".runtime");
   }
 
   private filePath(agentId: string): string {

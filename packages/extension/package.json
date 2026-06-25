@@ -74,7 +74,7 @@
       },
       {
         "command": "hallucinate.openStage",
-        "title": "Hallucinate: Open Conducting Board",
+        "title": "Hallucinate: Open Board",
         "icon": "$(dashboard)"
       },
       {

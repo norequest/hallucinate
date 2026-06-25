@@ -2,7 +2,7 @@ import type { AgentDefaults } from "@hallucinate/core";
 
 /**
  * The skills the lead (the agent holding a team roster) is given when a
- * `.conductor` dir predates the config-driven `defaults` block. The conductor's
+ * `.hallucinate` dir predates the config-driven `defaults` block. The conductor's
  * delegation brief now comes from config, not hardcoded on CONDUCTOR_ROLE; this
  * fallback keeps the lead's playbook working for legacy repos that have no
  * `defaults:` block yet. These three are the vendored coordination skills that
@@ -18,7 +18,7 @@ export const FALLBACK_LEAD_SKILLS = [
  * Resolve the effective {@link AgentDefaults} to push onto the orchestrator from
  * a loaded config's `defaults` block.
  *
- * - When the config carries NO `defaults` (a legacy `.conductor` dir, or none at
+ * - When the config carries NO `defaults` (a legacy `.hallucinate` dir, or none at
  *   all, falling back to DEFAULT_CONFIG), return the fallback that still gives
  *   the lead the coordination playbook: `{ leadSkills: FALLBACK_LEAD_SKILLS }`.
  * - When the config DOES carry `defaults`, pass it through UNCHANGED. An explicit

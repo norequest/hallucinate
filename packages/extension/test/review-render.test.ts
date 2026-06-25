@@ -67,7 +67,7 @@ describe("renderReview — clean path", () => {
     // own escape. The webview wires data-action="review-close" to backToBoard().
     const html = renderReview(card(), parsed());
     expect(html).toContain('data-action="review-close"');
-    expect(html).toContain("Conducting Board");
+    expect(html).toContain("Board");
     expect(html).toContain('class="rv-back"');
   });
 

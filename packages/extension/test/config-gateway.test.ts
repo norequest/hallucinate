@@ -7,7 +7,7 @@ import { makeConfigGateway } from "../src/config-gateway.js";
 /**
  * R6 containment: the gateway must refuse skill/role names that are not a clean
  * single path segment, BEFORE building any filesystem path, so a write or remove
- * can never escape its home dir (.github/skills/ for skills, .conductor/ for
+ * can never escape its home dir (.github/skills/ for skills, .hallucinate/ for
  * roles and teams). assertSafeSegment runs ahead of any fs access, so these
  * reject without touching disk.
  */
@@ -73,7 +73,7 @@ describe("config-gateway · role + team file writes (real fs)", () => {
     try {
       const gw = makeConfigGateway(root);
       await gw.seedRole({ name: "Reviewer" });
-      const rolePath = join(root, ".conductor", "roles", "reviewer.yaml");
+      const rolePath = join(root, ".hallucinate", "roles", "reviewer.yaml");
       const text = await readFile(rolePath, "utf8");
       expect(text).toContain("name: Reviewer");
       expect(text).toContain("id: copilot");
@@ -90,7 +90,7 @@ describe("config-gateway · role + team file writes (real fs)", () => {
     try {
       const gw = makeConfigGateway(root);
       await gw.writeTeam({ name: "Checkout Squad", roleNames: ["Tester", "Reviewer"] });
-      const teamPath = join(root, ".conductor", "teams", "checkout-squad.yaml");
+      const teamPath = join(root, ".hallucinate", "teams", "checkout-squad.yaml");
       const text = await readFile(teamPath, "utf8");
       expect(text).toContain("name: Checkout Squad");
       // Role references are plain name strings, not nested role objects.
@@ -107,9 +107,9 @@ describe("config-gateway · role + team file writes (real fs)", () => {
   it("deleteRole on a missing file is a no-op (does not throw)", async () => {
     const root = await mkdtemp(join(tmpdir(), "hallucinate-gw-"));
     try {
-      // Create the .conductor dir so the containment guard is satisfied but the
+      // Create the .hallucinate dir so the containment guard is satisfied but the
       // file is absent.
-      await mkdir(join(root, ".conductor", "roles"), { recursive: true });
+      await mkdir(join(root, ".hallucinate", "roles"), { recursive: true });
       const gw = makeConfigGateway(root);
       await expect(gw.deleteRole("ghost")).resolves.toBeUndefined();
     } finally {
@@ -120,7 +120,7 @@ describe("config-gateway · role + team file writes (real fs)", () => {
 
 /**
  * Library "Skills" tab create/edit/delete must operate on .github/skills/, the
- * same home VS Code and Copilot read (not the legacy .conductor/skills/). These
+ * same home VS Code and Copilot read (not the legacy .hallucinate/skills/). These
  * pin the exact on-disk path a saveSkill lands and a deleteSkill removes.
  */
 describe("config-gateway · skill file writes land under .github/skills (real fs)", () => {
@@ -138,8 +138,8 @@ describe("config-gateway · skill file writes land under .github/skills (real fs
       expect(text).toContain("Run the test suite before reporting done.");
       expect(text).toContain("Use the project test runner.");
 
-      // It must NOT land in the legacy .conductor/skills/ location.
-      const legacyPath = join(root, ".conductor", "skills", "run-tests", "SKILL.md");
+      // It must NOT land in the legacy .hallucinate/skills/ location.
+      const legacyPath = join(root, ".hallucinate", "skills", "run-tests", "SKILL.md");
       await expect(readFile(legacyPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
       await gw.deleteSkill("run-tests");

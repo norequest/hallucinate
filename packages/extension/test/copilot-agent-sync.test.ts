@@ -24,7 +24,7 @@ description: Split a task into independent worktree teammates.
 Do the glue work yourself, then write one delegate block per independent unit.
 `;
 
-/** An in-memory FsReader serving exactly one skill under .conductor/skills/. */
+/** An in-memory FsReader serving exactly one skill under .hallucinate/skills/. */
 function fakeReader(files: Record<string, string>, dirs: Record<string, string[]>) {
   return {
     readFile: async (p: string): Promise<string> => {
@@ -38,7 +38,7 @@ function fakeReader(files: Record<string, string>, dirs: Record<string, string[]
   };
 }
 
-const skillsDir = `${REPO}/.conductor/skills`;
+const skillsDir = `${REPO}/.hallucinate/skills`;
 const reader = fakeReader(
   { [`${skillsDir}/${SKILL_NAME}/SKILL.md`]: SKILL_MD },
   { [skillsDir]: [SKILL_NAME] },
@@ -75,7 +75,7 @@ describe("resolveRolePreamble: lead leadSkills resolve to SkillRef[]", () => {
     expect(skills).toBeUndefined();
   });
 
-  it("degrades to no skills when the .conductor/skills dir is absent (resolver never throws)", async () => {
+  it("degrades to no skills when the .hallucinate/skills dir is absent (resolver never throws)", async () => {
     const empty = fakeReader({}, {});
     const { skills } = await resolveRolePreamble(REPO, leadRole([SKILL_NAME]), empty);
     expect(skills).toBeUndefined();

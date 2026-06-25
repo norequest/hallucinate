@@ -8,7 +8,7 @@ import type { AnatomyVM } from "./anatomy-protocol.js";
 import type { ReviewOpenOpts } from "./review-render.js";
 
 /**
- * The single "Conducting Board" webview panel: ONE editor tab hosting the board,
+ * The single "Board" webview panel: ONE editor tab hosting the board,
  * library, anatomy, and review surfaces in-place (the app-main.js router swaps
  * them). This stays a THIN transport: it guards inbound messages with
  * isAppMessage and forwards them to one onMessage callback, and exposes typed
@@ -37,7 +37,7 @@ export class StageWebviewPanel {
       this.panel.reveal(vscode.ViewColumn.Active);
       return;
     }
-    const panel = vscode.window.createWebviewPanel("hallucinate.stage", "Conducting Board", vscode.ViewColumn.Active, {
+    const panel = vscode.window.createWebviewPanel("hallucinate.stage", "Board", vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "dist")],

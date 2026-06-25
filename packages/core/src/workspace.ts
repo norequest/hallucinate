@@ -62,7 +62,7 @@ export interface WorkspaceManager extends WorkspaceProvider {
   adopt?(agentId: string, workspace: Workspace): Promise<void>;
   /**
    * Materialize the agent's resolved skills into its worktree (e.g. one
-   * .conductor/skills/<name>/SKILL.md per ref) so the running engine can
+   * .hallucinate/skills/<name>/SKILL.md per ref) so the running engine can
    * discover and load them on demand. Optional: implementations predating this
    * are tolerated via the guarded optional call in the orchestrator.
    */

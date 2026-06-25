@@ -35,11 +35,11 @@ The engines are separate tools you must already have installed. Hallucinate driv
 ## Getting started
 
 1. Open a folder that is a git repository.
-2. Click the Hallucinate icon in the activity bar to open the Conducting Board.
+2. Click the Hallucinate icon in the activity bar to open the Board.
 3. Dispatch an agent: pick a role, write the task, and send it. The agent gets a fresh worktree and streams live on the board.
 4. When it finishes, open the diff and Merge, Discard, or Send back with feedback. With PR mode on, open a pull request instead.
 
-Roles, teams, and skills live in a `.conductor/` directory in your workspace, which Hallucinate scaffolds on first run.
+Roles, teams, and skills live in a `.hallucinate/` directory in your workspace, which Hallucinate scaffolds on first run.
 
 ## Links
 

@@ -16,7 +16,7 @@ const GROUP_META: Record<
   { pathHint: string; subtitle: string }
 > = {
   "in-repo": {
-    pathHint: ".claude/agents · .conductor/roles · AGENTS.md · copilot-instructions",
+    pathHint: ".claude/agents · .hallucinate/roles · AGENTS.md · copilot-instructions",
     subtitle: "Definitions committed in your workspace",
   },
   plugins: {

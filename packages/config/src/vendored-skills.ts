@@ -188,15 +188,15 @@ export const TEAM_COMPOSITION_PATTERNS_SKILL: VendoredSkill = {
   manifest: {
     name: "team-composition-patterns",
     description:
-      "Load when deciding how many teammates to delegate to and which roles to draw from the invoked team's roster. Use when sizing a team, picking the smallest set of roles that covers a task, or shaping a team in .conductor/teams.",
+      "Load when deciding how many teammates to delegate to and which roles to draw from the invoked team's roster. Use when sizing a team, picking the smallest set of roles that covers a task, or shaping a team in .hallucinate/teams.",
   },
   body: `# Team Composition Patterns
 
 Adapted from github.com/wshobson/agents (MIT). See THIRD-PARTY-NOTICES.md.
 
 How to size a team and pick which roles to delegate to. In Hallucinate a team is a
-roster of roles defined in \`.conductor/roles\` and grouped in
-\`.conductor/teams\`. The conductor is ALWAYS the coordinator: there is no
+roster of roles defined in \`.hallucinate/roles\` and grouped in
+\`.hallucinate/teams\`. The conductor is ALWAYS the coordinator: there is no
 separate lead to spawn, and teammates cannot coordinate with each other. Choosing
 which specialists to use means choosing which roles from the invoked team's
 roster to send delegate blocks to.
@@ -205,7 +205,7 @@ roster to send delegate blocks to.
 
 - Deciding how many teammates to delegate to for a task.
 - Choosing which roles from the roster cover the task's dimensions.
-- Shaping a reusable team (a role roster) in \`.conductor/teams\`.
+- Shaping a reusable team (a role roster) in \`.hallucinate/teams\`.
 - Trimming a team that grew too large to coordinate.
 
 ## Team sizing heuristics
@@ -224,8 +224,8 @@ genuinely uncovered.
 
 ## Example team shapes
 
-These are example role rosters you can define in \`.conductor/teams\`, grouping
-roles from \`.conductor/roles\`. They are shapes, not built-ins: name the roles
+These are example role rosters you can define in \`.hallucinate/teams\`, grouping
+roles from \`.hallucinate/roles\`. They are shapes, not built-ins: name the roles
 to match your project, and remember the conductor coordinates all of them.
 
 ### Review team

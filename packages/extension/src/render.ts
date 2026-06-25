@@ -383,7 +383,7 @@ function delegationsBlock(state: CockpitState): string {
 }
 
 /**
- * The full Conducting Board: tab strip, header, the pending-delegations block,
+ * The full Board: tab strip, header, the pending-delegations block,
  * three lane columns, status bar. Pre-existing callers expect a single string;
  * the drawer is appended separately by the webview client.
  */

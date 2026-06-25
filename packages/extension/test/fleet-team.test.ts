@@ -10,7 +10,7 @@ import {
   buildFleetPrompt,
   launchFleetTeam,
   teammateDescription,
-  toFleetConductor,
+  toFleetLead,
   usesFleet,
 } from "../src/fleet-team.js";
 
@@ -40,10 +40,10 @@ describe("usesFleet", () => {
   });
 });
 
-describe("toFleetConductor", () => {
+describe("toFleetLead", () => {
   it("rewrites ONLY engine.id to the fleet id, preserving everything else", () => {
     const c: Role = { ...conductor, engine: { id: "copilot", model: "gpt-5" }, skills: ["x"] };
-    const f = toFleetConductor(c);
+    const f = toFleetLead(c);
     expect(f.engine.id).toBe(FLEET_ENGINE_ID);
     expect(f.engine.model).toBe("gpt-5");
     expect(f.name).toBe("Conductor");
@@ -232,6 +232,6 @@ describe("fleet wiring in extension.ts (source)", () => {
   it("the team-launch path chooses fleet for a Copilot lead, else the delegate model", () => {
     expect(extensionSrc).toMatch(/if\s*\(usesFleet\(CONDUCTOR_ROLE\)\)/);
     expect(extensionSrc).toMatch(/await launchFleetTeam\(/);
-    expect(extensionSrc).toMatch(/launchConductorTeam\(/);
+    expect(extensionSrc).toMatch(/launchLeadTeam\(/);
   });
 });
