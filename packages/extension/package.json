@@ -1,7 +1,7 @@
 {
   "name": "hallucinate",
-  "displayName": "Hallucinate: Conduct AI Coding Agents",
-  "description": "Conduct a team of AI coding agents in isolated git worktrees.",
+  "displayName": "Hallucinate: Run AI Coding Agents",
+  "description": "Run a team of AI coding agents in isolated git worktrees.",
   "version": "0.1.10",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "agents",
     "github-copilot",
     "coding-agent",
-    "orchestration",
+    "coordination",
     "git-worktree",
     "acp",
     "multi-agent"

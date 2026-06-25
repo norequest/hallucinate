@@ -51,15 +51,15 @@ export interface CardVM {
   /** Set when this agent was delegated by a lead: the lead agent's id, so the board can group it under the lead. */
   parentId?: string;
   /**
-   * True for a stream-derived fleet sub-agent: nested under its conductor, no own
+   * True for a stream-derived fleet sub-agent: nested under its lead, no own
    * worktree/branch/session, and READ-ONLY. The board renders it without any
-   * action affordances (no Merge/Discard/Review/Approve/Steer); the conductor
+   * action affordances (no Merge/Discard/Review/Approve/Steer); the lead
    * stays the single reviewable/mergeable unit.
    */
   virtual?: boolean;
 }
 
-/** A pending delegation: a lead asked to bring a teammate in, awaiting the conductor's approve/deny. */
+/** A pending delegation: a lead asked to bring a teammate in, awaiting the lead's approve/deny. */
 export interface DelegationVM {
   id: string;
   /** The lead agent that asked for this teammate. */

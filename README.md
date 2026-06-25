@@ -1,19 +1,19 @@
 # Hallucinate
 
-Conduct a team of AI coding agents in isolated git worktrees, without leaving VS Code.
+Run a team of AI coding agents in isolated git worktrees, without leaving VS Code.
 
 Hallucinate dispatches agents to your own engine CLIs (GitHub Copilot, Gemini/ACP), watches them stream on one board, and lets you review each agent's diff before anything merges. Because it drives each engine's CLI, it reuses that tool's existing login. No API key.
 
-> Beta. Published to the VS Code Marketplace as a pre-release (extension `v0.1.10`). The orchestration core is built and tested: 8 packages, 1609 tests.
+> Beta. Published to the VS Code Marketplace as a pre-release (extension `v0.1.10`). The coordination core is built and tested: 8 packages, 1609 tests.
 
 ## Demo
 
-<p align="center"><img src="https://raw.githubusercontent.com/norequest/hallucinate/main/media/demo.gif" width="340" alt="Hallucinate: conduct a team of AI coding agents in VS Code" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/norequest/hallucinate/main/media/demo.gif" width="340" alt="Hallucinate: run a team of AI coding agents in VS Code" /></p>
 <p align="center"><a href="https://raw.githubusercontent.com/norequest/hallucinate/main/media/hallucinate-dev.mp4">Download the full-quality video (MP4)</a></p>
 
 ## Features
 
-- Model-agnostic. The orchestration brain is engine-neutral; engines plug in behind one small adapter.
+- Model-agnostic. The coordination brain is engine-neutral; engines plug in behind one small adapter.
 - Reuses your existing login. Each engine runs as its own CLI subprocess, so Hallucinate never touches your API keys.
 - Two engine families: GitHub Copilot CLI and any ACP engine (drives `gemini --acp --stdio`).
 - Real isolation. By default every agent works in its own `git worktree` on its own branch, so parallel agents never collide.
@@ -32,7 +32,7 @@ Hallucinate dispatches agents to your own engine CLIs (GitHub Copilot, Gemini/AC
 
 ## Quick start
 
-1. Install from the VS Code Marketplace (search "Hallucinate: Conduct AI Coding Agents" in the Extensions view, or run the command). This is a pre-release (beta) build:
+1. Install from the VS Code Marketplace (search "Hallucinate: Run AI Coding Agents" in the Extensions view, or run the command). This is a pre-release (beta) build:
    ```bash
    code --install-extension norequest.hallucinate
    ```
@@ -45,7 +45,7 @@ Roles, teams, and skills live in a `.hallucinate/` directory in your workspace, 
 
 ## Development
 
-Hallucinate is a pnpm workspace monorepo (plain `pnpm -r`, no Turborepo). The orchestration brain (`@hallucinate/core` and the engine adapters) is pure TypeScript with no `vscode` imports, so it unit-tests in isolation; `@hallucinate/extension` is the only package that touches the VS Code API.
+Hallucinate is a pnpm workspace monorepo (plain `pnpm -r`, no Turborepo). The coordination brain (`@hallucinate/core` and the engine adapters) is pure TypeScript with no `vscode` imports, so it unit-tests in isolation; `@hallucinate/extension` is the only package that touches the VS Code API.
 
 ```bash
 git clone https://github.com/norequest/hallucinate.git
@@ -85,7 +85,7 @@ A running Extension Development Host does not pick up a rebuild on its own: clos
 | Engine id | Used for | Isolation |
 | --- | --- | --- |
 | `copilot` | A single Copilot agent, or an isolated team | One `git worktree` and branch per agent. Each agent has its own diff. |
-| `copilot-fleet` | A team whose lead engine is Copilot | One shared session. Named teammates run as in-session sub-agents and share the conductor's worktree. You review one combined diff. |
+| `copilot-fleet` | A team whose lead engine is Copilot | One shared session. Named teammates run as in-session sub-agents and share the lead's worktree. You review one combined diff. |
 | `acp` | A single Gemini/ACP agent, or an ACP team | One `git worktree` and branch per agent. |
 
 Trade-off: fleet gives you one shared context and one combined diff. Isolated mode gives every agent its own worktree and its own reviewable diff. Single-agent dispatch and ACP teams always use isolated worktrees.
@@ -102,7 +102,7 @@ Trade-off: fleet gives you one shared context and one combined diff. Isolated mo
 
 ## Contributing
 
-Hallucinate is pre-release and very much open to contributions. If you hit a bug, have an idea, or just have a question, please open a GitHub issue at https://github.com/norequest/hallucinate/issues. That is the best place to start a conversation, whether it is about an engine adapter, the Board UI, or the orchestration core. Pull requests are welcome too, and opening an issue first is a great way to make sure the change lands cleanly.
+Hallucinate is pre-release and very much open to contributions. If you hit a bug, have an idea, or just have a question, please open a GitHub issue at https://github.com/norequest/hallucinate/issues. That is the best place to start a conversation, whether it is about an engine adapter, the Board UI, or the coordination core. Pull requests are welcome too, and opening an issue first is a great way to make sure the change lands cleanly.
 
 ## License
 

@@ -62,7 +62,7 @@ describe("renderReview — clean path", () => {
     expect(html).toContain("Add login route");
   });
 
-  it("header renders a Back-to-board button so the conductor is never stranded", () => {
+  it("header renders a Back-to-board button so the user is never stranded", () => {
     // Regression: the full review replaces the whole board, so it MUST carry its
     // own escape. The webview wires data-action="review-close" to backToBoard().
     const html = renderReview(card(), parsed());

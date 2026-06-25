@@ -2,8 +2,8 @@ import type { AgentDefaults } from "@hallucinate/core";
 
 /**
  * The skills the lead (the agent holding a team roster) is given when a
- * `.hallucinate` dir predates the config-driven `defaults` block. The conductor's
- * delegation brief now comes from config, not hardcoded on CONDUCTOR_ROLE; this
+ * `.hallucinate` dir predates the config-driven `defaults` block. The lead's
+ * delegation brief now comes from config, not hardcoded on LEAD_ROLE; this
  * fallback keeps the lead's playbook working for legacy repos that have no
  * `defaults:` block yet. These three are the vendored coordination skills that
  * STARTER_CONFIG_YAML lists under `defaults.leadSkills`.

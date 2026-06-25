@@ -8,7 +8,7 @@ import type { Autonomy } from "./types.js";
  * `COPILOT_ENGINE_ID` and `ACP_ENGINE_ID` are USER-AUTHORABLE: a role in
  * .hallucinate/ may name them, and config's KNOWN_ENGINE_IDS is derived from them.
  * `FLEET_ENGINE_ID` is INTERNAL: it is injected only at launch (a Copilot team's
- * conductor is rewritten to it) and is intentionally NOT user-authorable, so it
+ * lead is rewritten to it) and is intentionally NOT user-authorable, so it
  * is deliberately excluded from KNOWN_ENGINE_IDS.
  */
 export const COPILOT_ENGINE_ID = "copilot";

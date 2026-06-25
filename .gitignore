@@ -25,3 +25,6 @@ packages/extension/.github/
 
 # Internal docs (runbooks, design refs) kept local, not published to the repo
 /docs/
+
+# Local skill scaffold artifact (canonical source: packages/config/src/vendored-skills.ts)
+/.github/skills/

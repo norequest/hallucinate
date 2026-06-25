@@ -45,7 +45,7 @@ describe("GitWorkspaceManager (real git)", () => {
 
   // Issue 7 (WS5): git quotes/C-escapes paths with spaces or non-ASCII bytes by
   // default. diff() must use -z (NUL-delimited) so the real filename reaches the
-  // conductor's review surface intact, not a quoted/escaped mangling.
+  // lead's review surface intact, not a quoted/escaped mangling.
   it("diff returns spaced and non-ASCII (Georgian) filenames intact, not quoted/escaped", async () => {
     const m = new GitWorkspaceManager({ repoRoot: repo });
     const ws = await m.create("a1");

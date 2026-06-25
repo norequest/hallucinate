@@ -118,7 +118,7 @@ function parseClaude(text: string, source: string): DiscoveredItem {
   };
 }
 
-/** Parser for .hallucinate/roles/*.yaml (already-valid conductor role files) */
+/** Parser for .hallucinate/roles/*.yaml (already-valid native role files) */
 function parseHallucinateRole(text: string, source: string): DiscoveredItem {
   let raw: unknown;
   try {
@@ -137,7 +137,7 @@ function parseHallucinateRole(text: string, source: string): DiscoveredItem {
   const engineId = typeof rec["engine"] === "object" && rec["engine"] !== null
     ? safeString((rec["engine"] as Record<string, unknown>)["id"])
     : "";
-  // conductor roles already use known engine ids; forward them as hints.
+  // native roles already use known engine ids; forward them as hints.
   const engineHint = engineId || "acp";
 
   return {

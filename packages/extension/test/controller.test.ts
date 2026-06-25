@@ -240,7 +240,7 @@ describe("createCockpit", () => {
     expect(() => cockpit.handle({ type: "open-review", agentId: "a9" })).not.toThrow();
   });
 
-  // ─── Lead-orchestrated teams: delegation approve / deny ───────────────────
+  // ─── Lead-coordinated teams: delegation approve / deny ───────────────────
 
   it("approve-delegation calls orch.approveDelegation with the delegation id", () => {
     const { orch, calls } = fakeOrch();

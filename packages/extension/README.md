@@ -1,18 +1,18 @@
 # Hallucinate
 
-Conduct a team of AI coding agents in isolated git worktrees, without leaving VS Code.
+Run a team of AI coding agents in isolated git worktrees, without leaving VS Code.
 
 > Beta (pre-release). Extension v0.1.10. Built and tested: 8 packages, 1609 tests.
 
-<p align="center"><img src="https://raw.githubusercontent.com/norequest/hallucinate/main/media/demo.gif" width="340" alt="Hallucinate: conduct a team of AI coding agents in VS Code" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/norequest/hallucinate/main/media/demo.gif" width="340" alt="Hallucinate: run a team of AI coding agents in VS Code" /></p>
 
 ## What it is
 
-Hallucinate is model-agnostic orchestration for AI coding agents, living entirely in your editor. It drives your own engine CLIs (GitHub Copilot, Gemini, or any ACP engine) as subprocesses, so it reuses each tool's existing login and never touches your API keys. Every agent works in its own git worktree, and a finished agent is a diff you review before anything merges.
+Hallucinate is model-agnostic coordination for AI coding agents, living entirely in your editor. It drives your own engine CLIs (GitHub Copilot, Gemini, or any ACP engine) as subprocesses, so it reuses each tool's existing login and never touches your API keys. Every agent works in its own git worktree, and a finished agent is a diff you review before anything merges.
 
 ## Features
 
-- Model-agnostic. The orchestration brain is engine-neutral; engines plug in behind one small adapter.
+- Model-agnostic. The coordination brain is engine-neutral; engines plug in behind one small adapter.
 - Reuses your existing login. Each engine runs as its own CLI subprocess, so Hallucinate never touches your API keys.
 - Two engine families: GitHub Copilot CLI and any ACP engine (drives `gemini --acp --stdio`).
 - Real isolation. By default every agent works in its own `git worktree` on its own branch, so parallel agents never collide.

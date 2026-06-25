@@ -40,7 +40,7 @@ const STARTER_SKILL: { manifest: SkillManifest; body: string } = {
     "Do not modify test files; only fix the source code under test.",
 };
 
-const STARTER_CONFIG_YAML = `# Hallucinate orchestrator configuration
+const STARTER_CONFIG_YAML = `# Hallucinate run configuration
 # See .hallucinate/roles/ to define roles and .hallucinate/teams/ to group them.
 maxParallelAgents: 3
 

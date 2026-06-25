@@ -383,13 +383,13 @@ describe("VENDORED_SKILLS", () => {
     expect(body).toContain("delegate");
   });
 
-  it("team-composition-patterns keeps the sizing heuristics and conductor-as-coordinator framing", () => {
+  it("team-composition-patterns keeps the sizing heuristics and lead-as-coordinator framing", () => {
     const { body } = TEAM_COMPOSITION_PATTERNS_SKILL;
     expect(body).toContain("# Team Composition Patterns");
     expect(body).toContain("smallest");
     expect(body).toContain(".hallucinate/teams");
     expect(body).toContain(".hallucinate/roles");
-    expect(body).toContain("conductor is ALWAYS the coordinator");
+    expect(body).toContain("lead is ALWAYS the coordinator");
   });
 
   it("team-communication-protocols keeps complete-context and integration framing plus an anti-patterns table", () => {
@@ -398,7 +398,7 @@ describe("VENDORED_SKILLS", () => {
     expect(body).toContain("complete context");
     expect(body).toContain("Anti-patterns");
     expect(body).toContain("same worktree");
-    expect(body).toContain("conductor");
+    expect(body).toContain("lead");
   });
 });
 

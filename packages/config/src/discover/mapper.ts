@@ -92,7 +92,7 @@ function sourceStem(source: string): string {
  * INVARIANT: the returned id is always in KNOWN_ENGINE_IDS.
  */
 function resolveEngine(item: DiscoveredItem): string {
-  // conductor roles carry a valid engine id in their hint.
+  // native roles carry a valid engine id in their hint.
   if (item.kind === "hallucinate-role" && item.engineHint && KNOWN_ENGINE_IDS.has(item.engineHint)) {
     return item.engineHint;
   }

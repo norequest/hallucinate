@@ -70,8 +70,8 @@ function goalLine(card: CardVM): string {
 }
 
 /**
- * On a conductor card (one that some other card names as its parent), a faint
- * count of its sub-agents in the meta row, so a team run reads as one conductor
+ * On a lead card (one that some other card names as its parent), a faint
+ * count of its sub-agents in the meta row, so a team run reads as one lead
  * with N sub-agents. Singular "sub-agent" when N===1; nothing when N===0 (so a
  * non-parent card's markup is unchanged). The count comes from the full board.
  */
@@ -184,7 +184,7 @@ function removeButton(card: CardVM): string {
 function cardFooter(card: CardVM): string {
   // A virtual fleet sub-agent is READ-ONLY: it has no worktree/branch/session, so
   // it is never reviewable, removable, or mergeable. Render no action affordances;
-  // the conductor stays the single reviewable/mergeable unit. A tiny faint hint
+  // the lead stays the single reviewable/mergeable unit. A tiny faint hint
   // stands in so the card still reads as intentionally action-free.
   if (card.virtual) {
     return `<div class="card-footer"><span class="card-readonly">read-only sub-agent</span></div>`;
@@ -290,7 +290,7 @@ function boardHeader(state: CockpitState): string {
   const counts = laneCounts(state.cards);
   // "Need you" must be honest: count agents that need a decision PLUS every
   // pending delegation proposal (rendered in the strip above the lanes), so the
-  // header total matches what is actually awaiting the conductor.
+  // header total matches what is actually awaiting the lead.
   const needsYou = counts.needsYou + counts.conflict + (state.delegations?.length ?? 0);
   const total = state.cards.length;
   const agentWord = total === 1 ? "agent" : "agents";
@@ -530,9 +530,9 @@ function drawerFooter(card: CardVM): string {
 
   // A virtual fleet sub-agent is READ-ONLY: no approval panel, steer box, send-back
   // box, or merge/discard actions. Its drawer is a view-only window onto the
-  // sub-agent's output; the conductor remains the only actionable unit.
+  // sub-agent's output; the lead remains the only actionable unit.
   if (card.virtual) {
-    return `<footer class="drawer-actions drawer-footer-readonly"><span class="drawer-readonly-note">This is a read-only sub-agent. Act on the conductor instead.</span></footer>`;
+    return `<footer class="drawer-actions drawer-footer-readonly"><span class="drawer-readonly-note">This is a read-only sub-agent. Act on the lead instead.</span></footer>`;
   }
 
   // BLOCKED (awaiting input): the prototype shows a waiting note + an

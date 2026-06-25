@@ -132,7 +132,7 @@ function reviewHeader(card: CardVM, opts: ReviewOpts): string {
 
   // Always-available escape back to the Board. Opening the full review
   // replaces the whole board in the single-page panel, so without this the
-  // conductor is stranded (the webview wires data-action="review-close").
+  // user is stranded (the webview wires data-action="review-close").
   const back = `<button class="rv-back" data-action="review-close" type="button">&larr; Board</button>`;
 
   return `<header class="rv-header">

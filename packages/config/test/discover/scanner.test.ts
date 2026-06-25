@@ -393,7 +393,7 @@ describe("discoverWorkspace", () => {
     expect(fileWriter!.writeCapable).toBe(true);
   });
 
-  it("collapses a conductor role and its Copilot agent mirror to one item", async () => {
+  it("collapses a native role and its Copilot agent mirror to one item", async () => {
     // The same logical agent ("implementer") exists BOTH as a canonical
     // .hallucinate/roles/implementer.yaml role AND as a .github/agents/implementer.agent.md
     // Copilot mirror that Hallucinate itself writes. Without dedup, Discover would show it twice.
@@ -425,7 +425,7 @@ You implement the requested feature in this worktree, write tests, and commit.
     const implementers = result.items.filter((i) => normalize(i.name) === "implementer");
     // Exactly one survivor for the "implementer" name.
     expect(implementers).toHaveLength(1);
-    // The canonical conductor role wins; the Copilot mirror was dropped.
+    // The canonical native role wins; the Copilot mirror was dropped.
     expect(implementers[0]!.kind).toBe("hallucinate-role");
     // No copilot-agent item remains for this agent.
     const copilotMirrors = result.items.filter(

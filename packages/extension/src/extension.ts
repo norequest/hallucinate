@@ -49,27 +49,27 @@ const DEFAULT_ROLE: Role = {
 };
 
 /**
- * The single conductor (lead) persona. It ALWAYS leads a team run, scoped to that
- * team's roster of specialists. A team is just a scoped roster of specialists the
- * conductor may load as sub-agents; a team never promotes one of its own roles to
- * lead. The conductor does the glue work itself and delegates the specialized
- * parts by smart triage.
+ * The single lead persona. It ALWAYS heads a team run, scoped to that team's
+ * roster of specialists. A team is just a scoped roster of specialists the lead
+ * may load as sub-agents; a team never promotes one of its own roles to lead. The
+ * lead does the glue work itself and delegates the specialized parts by smart
+ * triage.
  *
- * A THIN lead persona: just the name + its orchestration instructions. The richer
+ * A THIN lead persona: just the name + its coordination instructions. The richer
  * coordination reference (the three vendored coordination skills) is NO LONGER
  * hardcoded here; it now rides in via the config-driven default layer
  * (`defaults.leadSkills` in .hallucinate/config.yaml, with the three coordination
  * skills as the fallback for legacy dirs). setDefaults composes leadSkills into the
- * lead ONLY, so the playbook reaches the conductor without this role naming it. The
+ * lead ONLY, so the playbook reaches the lead without this role naming it. The
  * skill bodies are scaffolded into .github/skills/<name>/SKILL.md on first
  * launch; a missing file is tolerated by the preamble resolver (it is simply
  * omitted), so a not-yet-scaffolded skill degrades gracefully rather than blocking
  * a launch.
  */
-const CONDUCTOR_ROLE: Role = {
-  name: "Conductor",
+const LEAD_ROLE: Role = {
+  name: "Lead",
   instructions:
-    "You are the conductor, the default agent leading this run. Do the glue work " +
+    "You are the lead, the default agent heading this run. Do the glue work " +
     "yourself: read the task, plan it, and make the straightforward changes directly. " +
     "Delegate the specialized parts to your sub-agents by smart triage, bringing in " +
     "the right specialist for the right slice rather than doing everything alone. You " +
@@ -80,14 +80,14 @@ const CONDUCTOR_ROLE: Role = {
 };
 
 const NO_FOLDER_MESSAGE =
-  "Hallucinate needs an open folder (a git repo) to conduct agents. Open a folder, then try again.";
+  "Hallucinate needs an open folder (a git repo) to run agents. Open a folder, then try again.";
 
 /**
- * The folder-dependent wiring built by {@link setupConducting}. Command handlers
- * close over a single `Conducting | undefined` so they keep working whether or
+ * The folder-dependent wiring built by {@link setupSession}. Command handlers
+ * close over a single `Session | undefined` so they keep working whether or
  * not a folder is open: with no folder the handlers warn instead of throwing.
  */
-interface Conducting {
+interface Session {
   readonly repoRoot: string;
   readonly orch: Orchestrator;
   readonly workspaces: GitWorkspaceManager;
@@ -111,25 +111,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // contributed commands are visible the moment the extension activates, which
   // happens eagerly at startup, possibly with no workspace folder open.
   // Registering them here means `command 'hallucinate.openStage' not found` can never
-  // happen; the folder-gated work lives in setupConducting() and the handlers
+  // happen; the folder-gated work lives in setupSession() and the handlers
   // warn until it exists. The Board (Stage) is the hero surface: it
-  // auto-opens once a folder is wired up (see the end of setupConducting). There
+  // auto-opens once a folder is wired up (see the end of setupSession). There
   // is no roster tree; the board is the entry point.
 
-  // The single piece of folder-dependent state. Reassigned by setupConducting();
+  // The single piece of folder-dependent state. Reassigned by setupSession();
   // read by every command handler to decide between acting and warning. The
-  // Stage webview lives inside it so it shares the conducting lifecycle.
-  let conducting: Conducting | undefined;
+  // Stage webview lives inside it so it shares the session lifecycle.
+  let session: Session | undefined;
 
   /**
    * Build all folder-dependent objects (workspaces, orchestrator, adapters,
    * cockpit, persistence) for the given repo root and store them in the
-   * `conducting` closure variable. Idempotent: a second call while conducting is
+   * `session` closure variable. Idempotent: a second call while session is
    * already set up is a no-op, so the onDidChangeWorkspaceFolders handler and the
    * activate-time call can both invoke it safely.
    */
-  async function setupConducting(repoRoot: string): Promise<void> {
-    if (conducting) return;
+  async function setupSession(repoRoot: string): Promise<void> {
+    if (session) return;
 
     const eventLogger = new EventLogger(new FsPersistenceBackend(repoRoot));
 
@@ -178,11 +178,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // This single shared adapter drives EVERY single-agent dispatch unchanged.
     orch.registerAdapter(new CopilotAdapter({ agentProfile: nodeAgentProfileWriter }));
     // A SECOND Copilot adapter in FLEET single-session mode, registered under a
-    // distinct engine id. A Copilot CONDUCTING run rewrites its conductor role's
+    // distinct engine id. A Copilot FLEET run rewrites its lead role's
     // engine id to FLEET_ENGINE_ID (see launchFleetTeam), so the orchestrator
-    // routes that ONE conductor process here while every other agent (and every
+    // routes that ONE lead process here while every other agent (and every
     // single-agent dispatch) stays on the plain "copilot" adapter above. The
-    // conductor's `/fleet` run surfaces its specialists as in-session sub-agents
+    // lead's `/fleet` run surfaces its specialists as in-session sub-agents
     // that the orchestrator nests as read-only virtual children. Wrapped so the
     // adapter advertises the fleet id (CopilotAdapter.id is hardcoded "copilot").
     const fleetCopilot = new CopilotAdapter({ agentProfile: nodeAgentProfileWriter, fleet: true });
@@ -204,7 +204,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // the orchestrator. orchConfig is the resolved HallucinateConfig read above; when a
     // legacy `.hallucinate` has no `defaults` block (or we fell back to DEFAULT_CONFIG)
     // applyDefaults injects the fallback `{ leadSkills: FALLBACK_LEAD_SKILLS }` (the
-    // three vendored coordination skills) so the conductor still gets its playbook.
+    // three vendored coordination skills) so the lead still gets its playbook.
     // A fresh per-launch read
     // refreshes this (see launchTeamByName) so config edits land without a reload.
     applyDefaults(orch, orchConfig);
@@ -297,7 +297,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // reliably know team counts), then open the IN-PAGE task composer: ONE
         // single-page surface, NO native OS dropdown. TEAMS are the unit of a task
         // run: the composer offers ONLY team selection. Picking a team launches it
-        // with the CONDUCTOR scoped to that team, delegating to its specialists.
+        // with the LEAD scoped to that team, delegating to its specialists.
         // With zero teams the composer shows an in-page create-team CTA instead of
         // a chip row; there is no standalone default-agent path. On submit the
         // webview posts launch-team.
@@ -398,7 +398,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       },
       // confirmClearDone: the destructive "Clear all" bulk discard drops several
       // un-reviewed worktrees, so gate it behind a native modal. True only when
-      // the conductor explicitly picks "Discard all".
+      // the user explicitly picks "Discard all".
       async (count) => {
         const choice = await vscode.window.showWarningMessage(
           `Discard ${count} ready-to-review run(s)? This drops their worktrees.`,
@@ -571,24 +571,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       if (!description) return;
 
-      // The CONDUCTOR always leads. A team is just a scoped roster: the conductor
+      // The LEAD always heads the run. A team is just a scoped roster: the lead
       // runs over the team's specialists (its sub-agents). The team's OWN `lead`
       // field is ignored entirely; the team never promotes one of its roles to lead.
       //
-      // TWO launch models, chosen by the conductor's lead engine:
+      // TWO launch models, chosen by the lead's engine:
       //  - COPILOT lead -> FLEET single-session mode (launchFleetTeam): ONE
-      //    conductor process whose `/fleet ...` run dispatches the specialists as
+      //    lead process whose `/fleet ...` run dispatches the specialists as
       //    in-session sub-agents, surfaced as read-only virtual child cards. NO
-      //    process per teammate. The conductor runs on the FLEET_ENGINE_ID adapter.
+      //    process per teammate. The lead runs on the FLEET_ENGINE_ID adapter.
       //  - ANY OTHER lead (e.g. ACP/gemini, which has no `/fleet`) -> the unchanged
-      //    delegate/spawn model (launchLeadTeam): the conductor delegates and
+      //    delegate/spawn model (launchLeadTeam): the lead delegates and
       //    each delegation auto-approves into its own teammate process.
       stage.reveal();
       try {
-        if (usesFleet(CONDUCTOR_ROLE)) {
-          await launchFleetTeam(selectedTeam, description, CONDUCTOR_ROLE, {
+        if (usesFleet(LEAD_ROLE)) {
+          await launchFleetTeam(selectedTeam, description, LEAD_ROLE, {
             // Build each teammate's `.agent.md` text here (where repoRoot/fsReader
-            // live) so the orchestrator can materialize it into the CONDUCTOR'S
+            // live) so the orchestrator can materialize it into the LEAD'S
             // worktree via SpawnOptions.agentProfiles. We do NOT write the main
             // repo `.github/agents/` and NEVER the global `~/.copilot/agents/`. The
             // slug name uses slugForRole so it matches the prompt roster.
@@ -609,7 +609,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             spawn: (roleName, desc, opts) => orch.spawn(roleName, desc, opts),
           });
         } else {
-          launchLeadTeam(selectedTeam, description, CONDUCTOR_ROLE, {
+          launchLeadTeam(selectedTeam, description, LEAD_ROLE, {
             registerRole: (role) => orch.registerRole(role),
             launchTeam: (team, desc, opts) => orch.launchTeam(team, desc, opts),
           });
@@ -787,7 +787,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         })(),
     });
 
-    conducting = { repoRoot, orch, workspaces, cockpit, stage, openAnatomy, launchTeamByName, routeAppMessage };
+    session = { repoRoot, orch, workspaces, cockpit, stage, openAnatomy, launchTeamByName, routeAppMessage };
 
     // The Board is the hero surface: open it as soon as a folder is
     // wired up so it is the first thing the user sees (the prototype's entry
@@ -796,33 +796,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   // Commands and the tree view register unconditionally. Handlers below read the
-  // `conducting` closure var; when it is undefined (no folder) they warn instead
+  // `session` closure var; when it is undefined (no folder) they warn instead
   // of throwing.
   context.subscriptions.push(
     vscode.commands.registerCommand("hallucinate.openStage", () => {
-      if (!conducting) {
+      if (!session) {
         void vscode.window.showWarningMessage(NO_FOLDER_MESSAGE);
         return;
       }
-      conducting.stage.reveal();
+      session.stage.reveal();
     }),
     vscode.commands.registerCommand("hallucinate.openLibrary", () => {
-      if (!conducting) {
+      if (!session) {
         void vscode.window.showWarningMessage(NO_FOLDER_MESSAGE);
         return;
       }
-      conducting.stage.reveal();
-      conducting.stage.navigate("library");
+      session.stage.reveal();
+      session.stage.navigate("library");
       // Ensure the library has data: postLibrary (fired by the controller) paints
       // the in-page view. open-library loads the Skills tab snapshot.
-      conducting.routeAppMessage({ type: "open-library" });
+      session.routeAppMessage({ type: "open-library" });
     }),
     vscode.commands.registerCommand("hallucinate.openAnatomy", async () => {
-      if (!conducting) {
+      if (!session) {
         void vscode.window.showWarningMessage(NO_FOLDER_MESSAGE);
         return;
       }
-      const { repoRoot, openAnatomy } = conducting;
+      const { repoRoot, openAnatomy } = session;
 
       const fsReader = await makeNodeFsReader();
       const loaded = await loadHallucinateDir(repoRoot, fsReader).catch(() => null);
@@ -857,11 +857,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await openAnatomy(selectedRole.name);
     }),
     vscode.commands.registerCommand("hallucinate.newAgent", async () => {
-      if (!conducting) {
+      if (!session) {
         void vscode.window.showWarningMessage(NO_FOLDER_MESSAGE);
         return;
       }
-      const { repoRoot, stage } = conducting;
+      const { repoRoot, stage } = session;
       const fsReader = await makeNodeFsReader();
       const data = await loadComposerData(repoRoot, fsReader).catch(() => ({
         roles: [],
@@ -877,11 +877,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       stage.postComposer(composerOptions(data.roles, data.teams));
     }),
     vscode.commands.registerCommand("hallucinate.spawnAgent", async () => {
-      if (!conducting) {
+      if (!session) {
         void vscode.window.showWarningMessage(NO_FOLDER_MESSAGE);
         return;
       }
-      const { repoRoot, orch, cockpit, stage } = conducting;
+      const { repoRoot, orch, cockpit, stage } = session;
 
       // First-run: scaffold .hallucinate/ if absent (non-fatal on failure).
       const fsWriter = await makeNodeFsWriter();
@@ -940,16 +940,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
     vscode.commands.registerCommand("hallucinate.launchTeam", async () => {
-      if (!conducting) {
+      if (!session) {
         void vscode.window.showWarningMessage(NO_FOLDER_MESSAGE);
         return;
       }
       // No name: the helper shows a quick-pick (or auto-selects the sole team).
-      await conducting.launchTeamByName();
+      await session.launchTeamByName();
     }),
   );
 
-  // If a folder is already open, wire up conducting now (the normal case). If
+  // If a folder is already open, wire up session now (the normal case). If
   // not, the commands above are still registered; they warn until a folder opens.
   // A persistent, always-visible launch point. The Hallucinate activity-bar container
   // was removed along with the roster tree, so this status bar item is the
@@ -969,17 +969,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (folder) {
-    await setupConducting(folder.uri.fsPath);
+    await setupSession(folder.uri.fsPath);
   }
 
   // When a folder later becomes available (the user opens one into an empty
-  // window), wire up conducting then. setupConducting is idempotent, so this is
+  // window), wire up session then. setupSession is idempotent, so this is
   // safe even if a folder was already present.
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      if (conducting) return;
+      if (session) return;
       const next = vscode.workspace.workspaceFolders?.[0];
-      if (next) void setupConducting(next.uri.fsPath);
+      if (next) void setupSession(next.uri.fsPath);
     }),
   );
 }

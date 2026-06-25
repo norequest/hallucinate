@@ -53,7 +53,7 @@ export function createCockpit(
   /**
    * Host-injected confirm for the destructive "Clear all" bulk discard. Receives
    * the number of ready-to-review runs about to be dropped; resolves true only
-   * when the conductor confirms. Defaulting to "no confirm available" => deny
+   * when the user confirms. Defaulting to "no confirm available" => deny
    * keeps the controller safe and pure (the host wires a real modal).
    */
   confirmClearDone?: (count: number) => Promise<boolean>,

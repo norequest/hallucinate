@@ -14,7 +14,7 @@ Hallucinate ships.
 
 Hallucinate vendors and adapts a small set of agent-coordination skills from
 wshobson/agents. The adapted copies are rewritten to fit Hallucinate's engine model
-(worktree-isolated CLI workers coordinated through a conductor), so they are
+(worktree-isolated CLI workers coordinated through a lead), so they are
 derivative works rather than verbatim copies. Because they derive from the
 upstream MIT-licensed material, the upstream copyright notice and the full MIT
 license text below are included and must travel with these copies.

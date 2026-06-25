@@ -703,7 +703,7 @@ window.addEventListener("message", (e: MessageEvent<HostToApp>) => {
       // The "+ New task" funnel. The host read .hallucinate/ fresh and sent the
       // hand-built teams. TEAMS are the unit of a task run: open ONE in-page
       // composer offering ONLY team selection (no native OS dropdown, no
-      // standalone default agent). Picking a team launches it with the conductor
+      // standalone default agent). Picking a team launches it with the lead
       // scoped to that team. On submit a team chip posts launch-team.
       //
       // Guard against the async race: this reply can arrive AFTER the user has
@@ -732,7 +732,7 @@ window.addEventListener("message", (e: MessageEvent<HostToApp>) => {
         eyebrow: "NEW TASK",
         subject: "Select a team",
         accent: "team",
-        placeholder: "Describe the task. The team's conductor delegates as needed...",
+        placeholder: "Describe the task. The team's lead delegates as needed...",
         submitLabel: "Launch",
         selector: {
           chips,
@@ -817,7 +817,7 @@ document.addEventListener("keydown", (e) => {
   }
 
   // (3) Full-page review: Escape is the keyboard twin of the Back button, so the
-  // conductor is never stranded off the Board.
+  // user is never stranded off the Board.
   if (view === "review") {
     backToBoard();
   }

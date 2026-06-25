@@ -200,17 +200,17 @@ describe("dedupeDiscoveredAgents: normalization", () => {
 // ---------------------------------------------------------------------------
 
 describe("dedupeDiscoveredAgents: order preservation", () => {
-  it("given [copilot A, conductor A, agent B] yields [conductor A, B] in that order", () => {
+  it("given [copilot A, native A, agent B] yields [native A, B] in that order", () => {
     const input = [
       agent("copilot-agent", "A", "copilot/A"),
-      agent("hallucinate-role", "A", "conductor/A"),
-      agent("hallucinate-role", "B", "conductor/B"),
+      agent("hallucinate-role", "A", "native/A"),
+      agent("hallucinate-role", "B", "native/B"),
     ];
     const out = dedupeDiscoveredAgents(input);
     expect(out).toHaveLength(2);
     expect(out[0]!.kind).toBe("hallucinate-role");
     expect(out[0]!.name).toBe("A");
-    expect(out[0]!.source).toBe("conductor/A");
+    expect(out[0]!.source).toBe("native/A");
     expect(out[1]!.name).toBe("B");
   });
 
@@ -218,13 +218,13 @@ describe("dedupeDiscoveredAgents: order preservation", () => {
     const input = [
       agent("copilot-agent", "A", "copilot/A"),
       makeItem({ kind: "instructions", name: "notes", source: "notes.md" }),
-      agent("hallucinate-role", "A", "conductor/A"),
+      agent("hallucinate-role", "A", "native/A"),
       makeItem({ kind: "claude-skill", name: "skill", source: "skill", isSkill: true }),
     ];
     const out = dedupeDiscoveredAgents(input);
-    // Agent A collapses (conductor wins, keeps slot 0). Non-agents stay put.
+    // Agent A collapses (native role wins, keeps slot 0). Non-agents stay put.
     expect(out.map((i) => i.kind)).toEqual(["hallucinate-role", "instructions", "claude-skill"]);
-    expect(out[0]!.source).toBe("conductor/A");
+    expect(out[0]!.source).toBe("native/A");
   });
 });
 
@@ -236,7 +236,7 @@ describe("dedupeDiscoveredAgents: purity", () => {
   it("does not mutate the input array or its items", () => {
     const input = [
       agent("copilot-agent", "Implementer", "copilot/impl"),
-      agent("hallucinate-role", "implementer", "conductor/impl"),
+      agent("hallucinate-role", "implementer", "native/impl"),
     ];
     const snapshot = input.map((i) => ({ ...i }));
     const inputRefs = [...input];

@@ -248,7 +248,7 @@ GITHUB BODY
 `;
     const legacyVersion = `---
 name: shared
-description: Conductor home loses.
+description: Legacy home loses.
 allowed-tools:
   - Git
 ---

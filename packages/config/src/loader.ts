@@ -147,7 +147,7 @@ export async function loadHallucinateDir(
 }
 
 /** Marker directory that bounds every file the node-backed reader may touch. */
-const CONDUCTOR_DIR_NAME = ".hallucinate";
+const HALLUCINATE_DIR_NAME = ".hallucinate";
 
 /**
  * Returns the nearest `.hallucinate` ancestor of `target` (inclusive), or null if
@@ -157,7 +157,7 @@ const CONDUCTOR_DIR_NAME = ".hallucinate";
 function hallucinateBoundary(nodePathMod: typeof import("node:path"), target: string): string | null {
   const resolved = nodePathMod.resolve(target);
   const segments = resolved.split(nodePathMod.sep);
-  const idx = segments.lastIndexOf(CONDUCTOR_DIR_NAME);
+  const idx = segments.lastIndexOf(HALLUCINATE_DIR_NAME);
   if (idx === -1) return null;
   return segments.slice(0, idx + 1).join(nodePathMod.sep);
 }
@@ -202,7 +202,7 @@ export async function makeNodeFsReader(): Promise<FsReader> {
         const contained = await isContained(fs, path, p, boundary).catch(() => false);
         if (!contained) {
           throw new Error(
-            `Refusing to read "${p}": it resolves outside the ${CONDUCTOR_DIR_NAME} directory (possible symlink escape).`,
+            `Refusing to read "${p}": it resolves outside the ${HALLUCINATE_DIR_NAME} directory (possible symlink escape).`,
           );
         }
       }

@@ -41,7 +41,7 @@ export class FakeWorkspaceProvider implements WorkspaceProvider {
  * WorkspaceProvider (e.g. FakeWorkspaceProvider) keeps working unchanged.
  */
 export interface WorkspaceManager extends WorkspaceProvider {
-  /** Diff of the agent's worktree vs its base; the conductor's review surface. */
+  /** Diff of the agent's worktree vs its base; the lead's review surface. */
   diff(agentId: string): Promise<Diff>;
   /** Merge the agent's branch into the base. Reports clean | conflict. */
   merge(agentId: string): Promise<MergeResult>;

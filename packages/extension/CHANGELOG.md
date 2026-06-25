@@ -8,7 +8,7 @@ Initial public pre-release (beta). The first build of Hallucinate published to t
 
 ### Added
 
-- Conduct a team of AI coding agents on one board inside VS Code.
+- Run a team of AI coding agents on one board inside VS Code.
 - Two engine families: GitHub Copilot CLI and any ACP engine (for example, Gemini via `gemini --acp --stdio`).
 - Isolation per agent: every agent works in its own `git worktree` on its own branch, so parallel agents never collide.
 - Review before merge: a finished agent is a diff you review, not a surprise commit. Merge it, discard it, send it back with feedback, or open a pull request.

@@ -71,7 +71,7 @@ describe("parseDiscoveredFile: hallucinate-role fixture", () => {
     expect(item.kind).toBe("hallucinate-role");
     expect(item.name).toBe("Implementer");
     expect(typeof item.description).toBe("string");
-    // conductor roles already have known engine ids
+    // native roles already have known engine ids
     expect(["copilot", "acp"]).toContain(item.engineHint);
   });
 });

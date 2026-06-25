@@ -45,7 +45,7 @@ const reader = fakeReader(
 );
 
 const leadRole = (skills: string[]): Role => ({
-  name: "Conductor",
+  name: "Lead",
   instructions: "You lead.",
   engine: { id: "copilot" },
   autonomy: "auto-approve-safe",

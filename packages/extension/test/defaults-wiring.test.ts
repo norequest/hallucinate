@@ -59,11 +59,11 @@ describe("defaults wiring in extension.ts (source)", () => {
     expect(launchBody).toMatch(/ensureVendoredSkills\(repoRoot,\s*fsWriter\)/);
   });
 
-  it("ensures the vendored skills at activation (setupConducting) so they appear without a launch", () => {
+  it("ensures the vendored skills at activation (setupSession) so they appear without a launch", () => {
     // The user's workspace already has a .hallucinate, so scaffoldIfMissing never
-    // writes the skills. setupConducting must ensure them at activation time so the
+    // writes the skills. setupSession must ensure them at activation time so the
     // three coordination SKILL.md files exist on disk before any team is launched.
-    const setupStart = extensionSrc.indexOf("async function setupConducting");
+    const setupStart = extensionSrc.indexOf("async function setupSession");
     expect(setupStart).toBeGreaterThanOrEqual(0);
     const setupEnd = extensionSrc.indexOf("// ── Library controller", setupStart);
     expect(setupEnd).toBeGreaterThan(setupStart);

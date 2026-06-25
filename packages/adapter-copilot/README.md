@@ -33,7 +33,7 @@ on the role's `engine.model`.
 
 ## v1 scope and limitations
 - **No interactive approval.** Each agent runs `--allow-all --no-ask-user`, which is
-  safe because it is sandboxed to its own worktree; the conductor reviews the **diff**
+  safe because it is sandboxed to its own worktree; the operator reviews the **diff**
   before merging. Per-tool approval awaits the ACP-mode upgrade.
 - **One-shot.** `copilot -p` runs once and exits; mid-run steering (`send`) is a no-op
   in v1 (`--continue` chaining is a later addition).

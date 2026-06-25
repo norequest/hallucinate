@@ -69,7 +69,7 @@ function homeHtml(hasFolder: boolean, nonce: string): string {
   const footer = hasFolder
     ? `<div class="hint hint--ready">
         <span class="hint-dot" aria-hidden="true"></span>
-        <span>Ready to conduct.</span>
+        <span>Ready to run.</span>
       </div>`
     : `<div class="hint">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -345,7 +345,7 @@ function homeHtml(hasFolder: boolean, nonce: string): string {
       </svg>
       <div class="brand-text">
         <div class="wordmark">Hallucinate</div>
-        <div class="tagline">Conduct a team of AI coding agents.</div>
+        <div class="tagline">Run a team of AI coding agents.</div>
       </div>
     </header>
 

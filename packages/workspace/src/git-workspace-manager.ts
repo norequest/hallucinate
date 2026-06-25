@@ -82,7 +82,7 @@ export class GitWorkspaceManager implements WorkspaceManager {
    * Collect the unmerged ("U") paths via the throwing git() helper so the
    * probe's own exit code is checked: a failed probe surfaces as an error
    * rather than silently parsing partial stdout as a conflict list. NUL-
-   * delimited so non-ASCII / spaced conflict paths reach the conductor intact.
+   * delimited so non-ASCII / spaced conflict paths reach the lead intact.
    */
   private async unmergedFiles(cwd = this.repoRoot): Promise<string[]> {
     const out = await this.git(["diff", "--name-only", "--diff-filter=U", "-z"], cwd);
