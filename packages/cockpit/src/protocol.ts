@@ -51,6 +51,16 @@ export interface CardVM {
   goal?: string;
   /** Counts of added/deleted lines in the diff patch, excluding file headers. */
   diffStat?: { adds: number; dels: number };
+  /**
+   * Diff GROWTH on the most recent update: the non-negative delta of `diffStat`
+   * versus the previous card, with `at` (Unix ms) marking when it was observed.
+   * SET when the diff grew on this update; CLEARED (undefined) on an update where
+   * it did not grow, so a present `momentum` reads as "growing right now". An
+   * `agent-event` output tick does not recompute the card, so momentum persists
+   * between successive diff updates. The Floor renders a faint eqbar-style
+   * "growing" pulse on a working card while momentum is set.
+   */
+  momentum?: { adds: number; dels: number; at: number };
   /** Unix ms timestamp of the first time this card entered "working" state. */
   startedAt?: number;
   /** P4 anatomy: whether a Soul is attached (false when no soul). */

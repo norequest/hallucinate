@@ -117,6 +117,31 @@ function eqMark(card: CardVM): string {
 }
 
 /**
+ * The "growing right now" pulse on a WORKING card: a tight added/deleted-lines
+ * badge with a single pulsing bar. Shown ONLY while `card.momentum` is set; the
+ * reducer clears momentum on an update where the diff did NOT grow, so a present
+ * value means "the diff is changing this moment". It is VISUALLY DISTINCT from the
+ * always-on `eqMark` ("alive"): a numeric growth badge, not the four-bar liveness
+ * mark. The label reflects the REAL direction of growth: "+N" when lines were
+ * added, "-N" when lines were deleted (a refactor with `adds:0, dels:N`), and
+ * "+N -M" when both grew, so a deletions-only refactor never reads as a bare
+ * "+0". Pure: presence and the numbers come straight from `card.momentum`, never
+ * recomputed here. The counts are typed numbers, interpolated like diffStat /
+ * anatomy.
+ */
+function momentumMark(card: CardVM): string {
+  if (card.lane !== "working" || !card.momentum) return "";
+  const { adds, dels } = card.momentum;
+  const parts: string[] = [];
+  if (adds > 0) parts.push(`+${adds}`);
+  if (dels > 0) parts.push(`-${dels}`);
+  // No real growth in either direction: render nothing (the reducer clears
+  // momentum in this case, so this is a defensive guard against a bare "+0").
+  if (!parts.length) return "";
+  return `<span class="card-momentum" aria-hidden="true" title="diff growing now"><i></i>${parts.join(" ")}</span>`;
+}
+
+/**
  * Human-readable status text for the card-header pill (prototype `pillText`,
  * line ~118). A small map keeps the copy friendly; the colour comes from the
  * lane via `state-pill lane-*` (see style.css).
@@ -255,7 +280,7 @@ export function renderCardHTML(card: CardVM, cards: CardVM[] = [], opts: { child
   const childClass = opts.child ? " is-child" : "";
   return `<section class="card lane-${card.lane} state-${card.state}${isDone ? " done" : ""}${card.attention ? " attention" : ""}${childClass}" data-id="${escapeHtml(card.id)}" tabindex="0">
   <header><span class="dot"></span>${statusPill(card)}<span class="role" title="${escapeHtml(card.roleName)}">${escapeHtml(card.roleName)}</span>${eqMark(card)}</header>
-  <div class="card-meta"><span class="engine">${escapeHtml(card.engineId)}</span>${viaMarker(card, cards)}${subagentsMarker(card, cards)}${elapsed(card)}</div>
+  <div class="card-meta"><span class="engine">${escapeHtml(card.engineId)}</span>${viaMarker(card, cards)}${subagentsMarker(card, cards)}${momentumMark(card)}${elapsed(card)}</div>
   ${goal}
   <div class="task">${escapeHtml(card.taskDescription)}</div>
   ${questionBlock(card)}
@@ -322,10 +347,17 @@ export function renderFloor(state: CockpitState): string {
       // The nesting cue is the `.floor-tile.is-child` WRAPPER only; do NOT pass
       // the lane `child` flag into the card (it would add the lane elbow/indent).
       const childClass = tile.child ? " is-child" : "";
-      return `<div class="floor-tile size-${tile.size} warmth-${tile.warmth}${childClass}">${renderCardHTML(card, state.cards, {})}</div>`;
+      // `data-agent-id` stamps the tile with its agent id so the webview can
+      // locate lead/child tiles by id and draw the connectors over them.
+      return `<div class="floor-tile size-${tile.size} warmth-${tile.warmth}${childClass}" data-agent-id="${escapeHtml(tile.id)}">${renderCardHTML(card, state.cards, {})}</div>`;
     })
     .join("");
-  return `<div class="floor">${body}</div>`;
+  // When at least one lead->child team exists, emit an overlay svg as the FIRST
+  // child of the Floor for the webview to draw connectors into at runtime (it
+  // sits BEHIND the tiles, see app.css). No teams (undefined or empty) -> no svg.
+  const connectors =
+    (state.teams?.length ?? 0) > 0 ? `<svg class="floor-connectors" aria-hidden="true"></svg>` : "";
+  return `<div class="floor">${connectors}${body}</div>`;
 }
 
 function columnSection(col: Column, cards: CardVM[]): string {

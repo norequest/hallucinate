@@ -115,3 +115,93 @@ describe("reducer M10: CardVM.needsYouSince (attention-queue ordering clock)", (
     expect(m.cards.get("a1")!.needsYouSince).toBeUndefined();
   });
 });
+
+// Build a Diff whose diffStat is exactly { adds, dels }: `adds` "+x" lines and
+// `dels` "-y" lines, none of which look like the "+++"/"---" file headers
+// diffStatFromPatch excludes.
+function diff(adds: number, dels: number) {
+  const patch = [...Array(adds)].map(() => "+x").join("\n") + "\n" + [...Array(dels)].map(() => "-y").join("\n");
+  return { patch, files: ["f.ts"] };
+}
+
+describe("reducer M10: CardVM.momentum (diff growth pulse)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is undefined for a freshly added agent with no diff", () => {
+    const m = reduce(initialModel(), added(agent({ state: "working" })));
+    expect(m.cards.get("a1")!.momentum).toBeUndefined();
+  });
+
+  it("sets momentum to the full diffStat when the first diff appears", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    vi.setSystemTime(2_000);
+    m = reduce(m, updated(agent({ state: "working", diff: diff(10, 0) })));
+    expect(m.cards.get("a1")!.momentum).toEqual({ adds: 10, dels: 0, at: 2_000 });
+  });
+
+  it("sets momentum to the growth delta when the diff grows", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    m = reduce(m, updated(agent({ state: "working", diff: diff(10, 0) })));
+    vi.setSystemTime(3_000);
+    m = reduce(m, updated(agent({ state: "working", diff: diff(25, 3) })));
+    expect(m.cards.get("a1")!.momentum).toEqual({ adds: 15, dels: 3, at: 3_000 });
+  });
+
+  it("clears momentum when the diff is unchanged across an update", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    m = reduce(m, updated(agent({ state: "working", diff: diff(25, 3) })));
+    vi.setSystemTime(4_000);
+    m = reduce(m, updated(agent({ state: "working", diff: diff(25, 3) })));
+    expect(m.cards.get("a1")!.momentum).toBeUndefined();
+  });
+
+  it("clamps a growth-only-in-deletions update to adds 0", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    m = reduce(m, updated(agent({ state: "working", diff: diff(10, 0) })));
+    vi.setSystemTime(5_000);
+    m = reduce(m, updated(agent({ state: "working", diff: diff(10, 4) })));
+    const momentum = m.cards.get("a1")!.momentum!;
+    expect(momentum.adds).toBe(0);
+    expect(momentum.dels).toBe(4);
+  });
+
+  it("clears momentum when the diff shrinks", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    m = reduce(m, updated(agent({ state: "working", diff: diff(25, 3) })));
+    vi.setSystemTime(6_000);
+    m = reduce(m, updated(agent({ state: "working", diff: diff(10, 0) })));
+    expect(m.cards.get("a1")!.momentum).toBeUndefined();
+  });
+
+  it("preserves momentum across an output tick (agent-event does not recompute)", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    vi.setSystemTime(2_000);
+    m = reduce(m, updated(agent({ state: "working", diff: diff(10, 0) })));
+    expect(m.cards.get("a1")!.momentum).toEqual({ adds: 10, dels: 0, at: 2_000 });
+
+    // An output tick advances the clock but must not recompute momentum.
+    vi.setSystemTime(9_000);
+    m = reduce(m, out("a1", "still streaming\n"));
+    expect(m.cards.get("a1")!.momentum).toEqual({ adds: 10, dels: 0, at: 2_000 });
+  });
+
+  it("stamps `at` with Date.now() at the growth moment", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    m = reduce(m, updated(agent({ state: "working", diff: diff(10, 0) })));
+    vi.setSystemTime(7_777);
+    m = reduce(m, updated(agent({ state: "working", diff: diff(12, 0) })));
+    expect(m.cards.get("a1")!.momentum!.at).toBe(7_777);
+  });
+});

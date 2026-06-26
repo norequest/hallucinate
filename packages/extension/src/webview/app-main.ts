@@ -44,6 +44,7 @@ import type { ReviewOpenOpts } from "../review-render.js";
 import type { DiscoveredItem, McpInventory } from "@hallucinate/config";
 import type { AppToHost, HostToApp, AppView } from "../app-protocol.js";
 import type { ToolGrant } from "@hallucinate/core";
+import { drawFloorConnectors } from "./floor-connectors.js";
 
 type ReadTool = "Read" | "Search";
 type WriteTool = "Edit" | "Run" | "Git";
@@ -167,10 +168,37 @@ function renderBoardView(): void {
     closedDrawerId = null;
   }
   applyDrawerTab(root);
+  redrawFloorConnectors();
   // Re-attach the composer overlay if it was open (innerHTML reset removes it,
   // but the overlay lives on document.body, not #root, so it survives — nothing
   // to do here; left as a note for clarity).
 }
+
+/**
+ * Draw the Floor's lead->child team connectors over the floor grid. Floor layout
+ * only: the connector overlay svg exists only on the Floor (not the status
+ * lanes), so drawFloorConnectors no-ops when absent. The offsets it reads are
+ * scroll-proof but layout-dependent, so this is re-run after every board render
+ * AND on resize (the responsive grid re-flows). Thin DOM glue, like tickElapsed.
+ */
+function redrawFloorConnectors(): void {
+  if (!root || groupByStatus) return;
+  const floorEl = root.querySelector<HTMLElement>(".floor");
+  if (floorEl) drawFloorConnectors(floorEl, lastCockpit.teams ?? []);
+}
+
+// Resize re-flows the responsive Floor grid, shifting tile offsets, so redraw the
+// connectors. Coalesce a burst of resize events into one requestAnimationFrame
+// (like tickElapsed, this only touches the svg overlay, never the whole board).
+let floorResizeFrame = 0;
+window.addEventListener("resize", () => {
+  if (view !== "board") return;
+  if (floorResizeFrame) return;
+  floorResizeFrame = requestAnimationFrame(() => {
+    floorResizeFrame = 0;
+    if (view === "board") redrawFloorConnectors();
+  });
+});
 
 /**
  * Re-apply the active drawer tab after a board re-render. renderDrawer always

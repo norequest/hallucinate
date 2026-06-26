@@ -31,11 +31,24 @@ function cardFromAgent(
   prevOutput: string,
   prevStartedAt: number | undefined,
   prevNeedsYouSince: number | undefined,
+  prevDiffStat: { adds: number; dels: number } | undefined,
 ): CardVM {
   const startedAt = prevStartedAt ?? (agent.state === "working" ? Date.now() : undefined);
   // Stamp the moment this card first entered an attention state; preserve it
   // across updates while it stays in attention; clear it when it leaves.
   const needsYouSince = stateNeedsAttention(agent.state) ? (prevNeedsYouSince ?? Date.now()) : undefined;
+  const diffStat = agent.diff ? diffStatFromPatch(agent.diff.patch) : undefined;
+  // Momentum is the GROWTH of diffStat versus the previous card. Set it (stamped
+  // now) only when the diff grew on this update; clear it otherwise, so a present
+  // momentum reads as "growing right now". Each delta is clamped to >= 0 so a
+  // simultaneous shrink in one axis never yields a negative.
+  const prev = prevDiffStat ?? { adds: 0, dels: 0 };
+  const dAdds = (diffStat?.adds ?? 0) - prev.adds;
+  const dDels = (diffStat?.dels ?? 0) - prev.dels;
+  const momentum =
+    diffStat && (dAdds > 0 || dDels > 0)
+      ? { adds: Math.max(0, dAdds), dels: Math.max(0, dDels), at: Date.now() }
+      : undefined;
   const grants = countGrants(agent.role.tools);
   return {
     id: agent.id,
@@ -58,7 +71,8 @@ function cardFromAgent(
     taskDescription: agent.task.description,
     instructions: agent.role.instructions,
     goal: agent.task.goal,
-    diffStat: agent.diff ? diffStatFromPatch(agent.diff.patch) : undefined,
+    diffStat,
+    momentum,
     startedAt,
     soul: agent.role.soul !== undefined,
     toolsCount: grants.granted,
@@ -98,7 +112,7 @@ export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitMo
         cards.delete(event.agent.id);
         if (focusedId === event.agent.id) focusedId = undefined;
       } else {
-        cards.set(event.agent.id, cardFromAgent(event.agent, "", undefined, undefined));
+        cards.set(event.agent.id, cardFromAgent(event.agent, "", undefined, undefined, undefined));
       }
       break;
     case "agent-updated": {
@@ -113,7 +127,7 @@ export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitMo
       const prev = cards.get(event.agent.id);
       cards.set(
         event.agent.id,
-        cardFromAgent(event.agent, prev?.output ?? "", prev?.startedAt, prev?.needsYouSince),
+        cardFromAgent(event.agent, prev?.output ?? "", prev?.startedAt, prev?.needsYouSince, prev?.diffStat),
       );
       break;
     }

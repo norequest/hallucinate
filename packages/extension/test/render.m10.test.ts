@@ -346,3 +346,106 @@ describe("renderBoard / renderFloor (M10 Phase D: Floor is the default board lay
     expect(html).toMatch(/lane-col-needsYou[\s\S]*?class="count">3</);
   });
 });
+
+describe("renderCardHTML (M10 Phase E: momentum 'growing' pulse on the working card)", () => {
+  /** Render one card via the column layout (the default Floor only shows tiles in
+   *  state.floor, which these card-only fixtures omit). */
+  function boardWith(overrides: Partial<CardVM>): string {
+    return renderBoard({ cards: [card(overrides)], delegations: [] }, { groupByStatus: true });
+  }
+
+  it("a working card WITH momentum renders the growing-pulse badge (+N)", () => {
+    const html = boardWith({
+      lane: "working",
+      state: "working",
+      momentum: { adds: 7, dels: 1, at: 0 },
+    });
+    // The growing-pulse marker is present, with the "+N" added-lines count.
+    expect(html).toContain("card-momentum");
+    expect(html).toContain("+7");
+  });
+
+  it("a working card with deletions-only momentum reflects the real growth (-N), never a bare +0", () => {
+    // The reducer sets momentum {adds:0, dels:N} while a working agent is actively
+    // DELETING lines (a normal refactor). A bare "+0" would misread as no growth;
+    // the badge must show the real direction (-N) instead.
+    const html = boardWith({
+      lane: "working",
+      state: "working",
+      momentum: { adds: 0, dels: 5, at: 0 },
+    });
+    expect(html).toContain("card-momentum");
+    expect(html).toContain("-5");
+    expect(html).not.toContain("+0");
+  });
+
+  it("a working card WITHOUT momentum renders no growing-pulse badge", () => {
+    const html = boardWith({ lane: "working", state: "working" });
+    expect(html).not.toContain("card-momentum");
+  });
+
+  it("a non-working card WITH momentum renders no growing-pulse badge", () => {
+    // momentum is a working-lane affordance only (the diff is growing right now);
+    // a done card keeps no pulse even if a stale momentum is attached.
+    const html = boardWith({
+      lane: "done",
+      state: "done",
+      momentum: { adds: 7, dels: 1, at: 0 },
+    });
+    expect(html).not.toContain("card-momentum");
+  });
+});
+
+describe("renderFloor (M10 Phase E: lead->child connector markup hooks)", () => {
+  /** One Floor tile (size+warmth over a card resolved by id). */
+  function tile(over: Partial<FloorTileVM> = {}): FloorTileVM {
+    return { id: "a1", size: "md", warmth: "live", child: false, ...over };
+  }
+
+  it("stamps every tile with data-agent-id and emits the connector overlay svg when teams exist", () => {
+    const html = renderFloor({
+      cards: [card({ id: "a1", roleName: "Lead" }), card({ id: "a2", roleName: "Child", parentId: "a1" })],
+      delegations: [],
+      floor: [tile({ id: "a1" }), tile({ id: "a2", child: true })],
+      teams: [{ leadId: "a1", memberIds: ["a2"] }],
+    });
+    // The overlay svg the webview draws connectors into (the FIRST child of .floor).
+    expect(html).toContain('<svg class="floor-connectors"');
+    // Every rendered tile carries its agent id so the webview can locate tiles.
+    expect(html).toContain('data-agent-id="a1"');
+    expect(html).toContain('data-agent-id="a2"');
+  });
+
+  it("emits NO connector svg when teams is an empty array (tiles still carry data-agent-id)", () => {
+    const html = renderFloor({
+      cards: [card({ id: "a1" })],
+      delegations: [],
+      floor: [tile({ id: "a1" })],
+      teams: [],
+    });
+    expect(html).not.toContain("floor-connectors");
+    expect(html).toContain('data-agent-id="a1"');
+  });
+
+  it("emits NO connector svg when teams is omitted", () => {
+    const html = renderFloor({
+      cards: [card({ id: "a1" })],
+      delegations: [],
+      floor: [tile({ id: "a1" })],
+    });
+    expect(html).not.toContain("floor-connectors");
+  });
+
+  it("leaves the empty-floor placeholder unchanged (no svg, no data-agent-id) even when teams exist", () => {
+    const html = renderFloor({
+      cards: [card({ id: "a1" })],
+      delegations: [],
+      floor: [],
+      teams: [{ leadId: "a1", memberIds: ["a2"] }],
+    });
+    expect(html).toContain('class="floor floor-empty"');
+    expect(html).toContain("No agents yet");
+    expect(html).not.toContain("floor-connectors");
+    expect(html).not.toContain("data-agent-id");
+  });
+});
