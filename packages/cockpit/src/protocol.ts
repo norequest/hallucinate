@@ -34,6 +34,13 @@ export interface CardVM {
    * detached, merge-cleanup-failed.
    */
   attention: boolean;
+  /**
+   * Unix ms when this card first entered an attention state (per
+   * `stateNeedsAttention`); preserved across updates while it stays in
+   * attention, cleared when it leaves. Orders the attention queue (oldest
+   * waiting first) and drives a "waiting" hint. Undefined when not waiting.
+   */
+  needsYouSince?: number;
   /** Which lane on the Board this card belongs to. */
   lane: Lane;
   /** The active task's description text. */
@@ -76,12 +83,45 @@ export interface DelegationVM {
   task: string;
 }
 
+/**
+ * One item in the attention queue: an agent that needs a human decision now.
+ * The attention bar shows one of these at a time (most-urgent first) and reuses
+ * existing messages (`focus` to jump; approve / resolve-conflict / open-review
+ * to act). No new host message is introduced.
+ */
+export interface AttentionVM {
+  /** The agent id; the bar reuses `focus` to jump to it. */
+  id: string;
+  roleName: string;
+  /** The agent's state, used to choose the inline primary action. */
+  state: AgentState;
+  /**
+   * The kind of attention, for the bar's label and primary action:
+   * approval -> awaiting-approval, conflict -> conflict, review -> done,
+   * error -> error, detached -> detached, cleanup -> merge-cleanup-failed.
+   */
+  kind: "approval" | "conflict" | "review" | "error" | "detached" | "cleanup";
+  /** For approvals: the pending approval id (to post approve / deny). */
+  pendingApprovalId?: string;
+  /** For approvals: human-readable detail of what is being approved. */
+  approvalDetail?: ApprovalDetail;
+  /** Unix ms the agent entered attention; for a "waiting" hint. */
+  since?: number;
+}
+
 /** The whole cockpit, a pure function of orchestrator events. `cards` are pre-ordered. */
 export interface CockpitState {
   cards: CardVM[];
   focusedId?: string;
   /** Pending delegation proposals, in arrival order. Resolved ones are dropped. */
   delegations: DelegationVM[];
+  /**
+   * The attention queue: agents needing a human decision, most-urgent first
+   * (conflict before approval; oldest `needsYouSince` wins ties). The webview's
+   * attention bar shows one at a time with an "n of m" counter. Omitted/empty
+   * when nothing needs you.
+   */
+  attention?: AttentionVM[];
 }
 
 /** Messages the extension host sends INTO the webview. */

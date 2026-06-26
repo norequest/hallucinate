@@ -26,8 +26,16 @@ function diffStatFromPatch(patch: string): { adds: number; dels: number } {
   return { adds, dels };
 }
 
-function cardFromAgent(agent: Agent, prevOutput: string, prevStartedAt: number | undefined): CardVM {
+function cardFromAgent(
+  agent: Agent,
+  prevOutput: string,
+  prevStartedAt: number | undefined,
+  prevNeedsYouSince: number | undefined,
+): CardVM {
   const startedAt = prevStartedAt ?? (agent.state === "working" ? Date.now() : undefined);
+  // Stamp the moment this card first entered an attention state; preserve it
+  // across updates while it stays in attention; clear it when it leaves.
+  const needsYouSince = stateNeedsAttention(agent.state) ? (prevNeedsYouSince ?? Date.now()) : undefined;
   const grants = countGrants(agent.role.tools);
   return {
     id: agent.id,
@@ -45,6 +53,7 @@ function cardFromAgent(agent: Agent, prevOutput: string, prevStartedAt: number |
     approvalDetail: agent.approvalDetail,
     engineCapabilities: agent.engineCapabilities,
     attention: stateNeedsAttention(agent.state),
+    needsYouSince,
     lane: laneFor(agent.state),
     taskDescription: agent.task.description,
     instructions: agent.role.instructions,
@@ -89,7 +98,7 @@ export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitMo
         cards.delete(event.agent.id);
         if (focusedId === event.agent.id) focusedId = undefined;
       } else {
-        cards.set(event.agent.id, cardFromAgent(event.agent, "", undefined));
+        cards.set(event.agent.id, cardFromAgent(event.agent, "", undefined, undefined));
       }
       break;
     case "agent-updated": {
@@ -102,7 +111,10 @@ export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitMo
         break;
       }
       const prev = cards.get(event.agent.id);
-      cards.set(event.agent.id, cardFromAgent(event.agent, prev?.output ?? "", prev?.startedAt));
+      cards.set(
+        event.agent.id,
+        cardFromAgent(event.agent, prev?.output ?? "", prev?.startedAt, prev?.needsYouSince),
+      );
       break;
     }
     case "agent-event": {

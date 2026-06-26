@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { renderBoard, renderDrawer } from "../src/render.js";
+import { renderBoard, renderDrawer, renderAttentionBar } from "../src/render.js";
 import type { CardVM, CockpitState } from "@hallucinate/cockpit";
+
+/** The attention-queue item type, derived from the already-exported CockpitState. */
+type AttentionItem = NonNullable<CockpitState["attention"]>[number];
+
+function attn(overrides: Partial<AttentionItem>): AttentionItem {
+  return {
+    id: "a1",
+    roleName: "Implementer",
+    state: "awaiting-approval",
+    kind: "approval",
+    ...overrides,
+  };
+}
 
 function card(overrides: Partial<CardVM>): CardVM {
   return {
@@ -141,5 +154,70 @@ describe("renderBoard (M10 Phase B: live activity tail on the working card)", ()
     // The overflow lines past the cap are dropped.
     expect(html).not.toContain(">l4<");
     expect(html).not.toContain(">l5<");
+  });
+});
+
+describe("renderAttentionBar (M10 Phase C: sticky attention bar)", () => {
+  it("renders one approval item: role, label, '1 of 1', a focus region, and Allow/Deny actions", () => {
+    const html = renderAttentionBar(
+      [
+        attn({
+          id: "a1",
+          roleName: "Implementer",
+          kind: "approval",
+          pendingApprovalId: "ap1",
+          approvalDetail: { tool: "Edit", description: "write login.ts" },
+        }),
+      ],
+      0,
+    );
+    // The role name and the derived label (tool from the approval detail) show.
+    expect(html).toContain("Implementer");
+    expect(html).toContain("Edit");
+    // The "n of m" counter.
+    expect(html).toContain("1 of 1");
+    // A clickable focus region reusing the existing focus message.
+    expect(html).toContain('data-action="focus"');
+    // The inline primary action reuses the EXACT approve/deny verbs + ids.
+    expect(html).toContain('data-action="approve"');
+    expect(html).toContain('data-action="deny"');
+    expect(html).toContain('data-approval-id="ap1"');
+  });
+
+  it("with three items, index 1 shows the SECOND item and '2 of 3'", () => {
+    const items: AttentionItem[] = [
+      attn({ id: "a1", roleName: "FirstAgent", kind: "conflict", state: "conflict" }),
+      attn({ id: "a2", roleName: "SecondAgent", kind: "review", state: "done" }),
+      attn({ id: "a3", roleName: "ThirdAgent", kind: "error", state: "error" }),
+    ];
+    const html = renderAttentionBar(items, 1);
+    // Only the item at index 1 (the review item) is shown.
+    expect(html).toContain("SecondAgent");
+    expect(html).toContain("2 of 3");
+    expect(html).toContain('data-id="a2"');
+    // Its review primary action reuses the existing open-review verb.
+    expect(html).toContain('data-action="open-review"');
+    // The other items are NOT in the bar (one item at a time).
+    expect(html).not.toContain("FirstAgent");
+    expect(html).not.toContain("ThirdAgent");
+  });
+
+  it("renders NO bar when the attention queue is empty", () => {
+    expect(renderAttentionBar([], 0)).toBe("");
+  });
+
+  it("escapes engine-supplied approval detail (never interpolated raw)", () => {
+    const html = renderAttentionBar(
+      [
+        attn({
+          kind: "approval",
+          pendingApprovalId: "ap1",
+          approvalDetail: { tool: "Run", description: "<script>alert(1)</script>" },
+        }),
+      ],
+      0,
+    );
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });

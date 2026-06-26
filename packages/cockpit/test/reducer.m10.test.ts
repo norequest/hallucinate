@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, OrchestratorEvent } from "@hallucinate/core";
 import { initialModel, reduce, OUTPUT_CAP } from "../src/reducer.js";
 
@@ -14,6 +14,7 @@ function agent(over: Partial<Agent> = {}): Agent {
   };
 }
 const added = (a: Agent): OrchestratorEvent => ({ kind: "agent-added", agent: a });
+const updated = (a: Agent): OrchestratorEvent => ({ kind: "agent-updated", agent: a });
 const out = (id: string, text: string): OrchestratorEvent => ({ kind: "agent-event", agentId: id, event: { kind: "output", text } });
 
 describe("reducer M10: CardVM.tail (live activity preview)", () => {
@@ -70,5 +71,47 @@ describe("reducer M10: CardVM.tail (live activity preview)", () => {
     // The most recent lines survive the cap and surface in the tail.
     expect(tail[tail.length - 1]).toBe("last");
     expect(tail[tail.length - 2]).toBe("penultimate");
+  });
+});
+
+describe("reducer M10: CardVM.needsYouSince (attention-queue ordering clock)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is set to the current time when a card first enters an attention state", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    // A plain working card is not waiting on anyone.
+    expect(m.cards.get("a1")!.needsYouSince).toBeUndefined();
+
+    vi.setSystemTime(5_000);
+    m = reduce(m, updated(agent({ state: "awaiting-approval" })));
+    expect(m.cards.get("a1")!.needsYouSince).toBe(5_000);
+  });
+
+  it("preserves the original needsYouSince across a later update while still in attention", () => {
+    vi.setSystemTime(5_000);
+    let m = reduce(initialModel(), added(agent({ state: "awaiting-approval" })));
+    expect(m.cards.get("a1")!.needsYouSince).toBe(5_000);
+
+    // Clock advances and the card moves to a DIFFERENT attention state; the
+    // original "waiting since" timestamp must not be reset.
+    vi.setSystemTime(9_000);
+    m = reduce(m, updated(agent({ state: "conflict" })));
+    expect(m.cards.get("a1")!.needsYouSince).toBe(5_000);
+  });
+
+  it("clears needsYouSince when the card leaves attention", () => {
+    vi.setSystemTime(5_000);
+    let m = reduce(initialModel(), added(agent({ state: "awaiting-approval" })));
+    expect(m.cards.get("a1")!.needsYouSince).toBe(5_000);
+
+    vi.setSystemTime(9_000);
+    m = reduce(m, updated(agent({ state: "working" })));
+    expect(m.cards.get("a1")!.needsYouSince).toBeUndefined();
   });
 });

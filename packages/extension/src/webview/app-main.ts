@@ -19,7 +19,8 @@ import type {
 } from "@hallucinate/cockpit";
 import { buildDispatchMessage, canDispatch, ENGINE_FAMILIES } from "@hallucinate/cockpit";
 import type { Autonomy } from "@hallucinate/core";
-import { renderBoard, renderDrawer } from "../render.js";
+import { renderBoard, renderDrawer, renderAttentionBar } from "../render.js";
+import { nextAttentionIndex } from "../attention-cycle.js";
 import { renderComposerHTML } from "../render-composer.js";
 import {
   renderLibraryHeader,
@@ -76,6 +77,10 @@ let lastComposerOptions: ComposerOptions | undefined;
 // drawer the user explicitly closed (so the next state tick does not re-open it).
 let drawerTab = "instructions";
 let closedDrawerId: string | null = null;
+// Attention bar: which queue item the bar currently shows. Reset to 0 on every
+// fresh board render (renderBoard always emits the bar at index 0), then advanced
+// by the auto-advance ticker (tickAttention) which re-renders ONLY the bar.
+let attentionIndex = 0;
 
 // Library.
 let libraryTab: LibraryTab = "agents";
@@ -139,6 +144,9 @@ function render(): void {
 
 function renderBoardView(): void {
   if (!root) return;
+  // A fresh state re-renders the bar at its most-urgent item, so reset the
+  // ticker's index to match renderBoard's hardcoded index 0.
+  attentionIndex = 0;
   // The board shell (tab strip + header + empty lanes + status bar) always
   // renders so "+ New agent" stays reachable even with zero agents.
   root.innerHTML = `${renderBoard(lastCockpit)}${renderDrawer(lastCockpit)}`;
@@ -609,6 +617,34 @@ function tickElapsed(): void {
 
 setInterval(tickElapsed, 1000);
 
+/**
+ * Auto-advance the attention bar through its queue. Like `tickElapsed`, this
+ * mutates ONLY the bar's DOM (replaces the `.attention-bar` element via
+ * `renderAttentionBar`), never the whole board, so the user's drawer / scroll /
+ * composer state is untouched. It advances only when there is more than one item
+ * and the user is not reading: PAUSE while the pointer hovers the bar, or while
+ * an agent's inspector/drawer is open (an agent is focused).
+ */
+function tickAttention(): void {
+  if (view !== "board") return;
+  const bar = document.querySelector<HTMLElement>(".attention-bar");
+  if (!bar) return;
+  const queue = lastCockpit.attention ?? [];
+  if (queue.length <= 1) return;
+  // Respect reduced-motion: a JS-driven content swap bypasses CSS media rules,
+  // so freeze on the most-urgent item for users who opt out of motion.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  // Pause: pointer over the bar, keyboard focus inside it (rotating would yank
+  // focus mid-action), or the focused-agent inspector is open.
+  if (bar.matches(":hover")) return;
+  if (bar.contains(document.activeElement)) return;
+  if (document.querySelector(".drawer")) return;
+  attentionIndex = nextAttentionIndex(attentionIndex, queue.length);
+  bar.outerHTML = renderAttentionBar(queue, attentionIndex);
+}
+
+setInterval(tickAttention, 4500);
+
 // ─── Navigation ──────────────────────────────────────────────────────────────
 
 /** Switch views, closing any body-mounted overlay first so it never strands
@@ -1008,6 +1044,13 @@ function handleBoardClick(target: HTMLElement): void {
       // In-page review: ask the host for the card; it replies with review-state,
       // which flips the view. Post the same open-review message as before.
       vscode.postMessage({ type: "open-review", agentId: id });
+    } else if (action === "focus") {
+      // The attention bar's label jumps to the agent, reusing the same focus
+      // path a card click uses: open its inspector fresh (clear the close
+      // suppression, reset to the default tab).
+      closedDrawerId = null;
+      drawerTab = "instructions";
+      vscode.postMessage({ type: "focus", agentId: id });
     } else if (action === "approve-delegation") {
       // `id` here is the DELEGATION id (not an agent id): the lead asked to bring
       // a teammate in; approving spawns it host-side.

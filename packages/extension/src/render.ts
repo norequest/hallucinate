@@ -1,6 +1,15 @@
 import type { CardVM, CockpitState, DelegationVM, Lane } from "@hallucinate/cockpit";
 import { escapeHtml } from "./html.js";
 
+/**
+ * One attention-queue item, derived structurally from the already-exported
+ * `CockpitState` (the `@hallucinate/cockpit` barrel does not re-export the
+ * `AttentionVM` name, so we read its element type off `CockpitState.attention`
+ * instead of importing it). Most-urgent-first ordering is the reducer's job; the
+ * bar just renders one of these at a time.
+ */
+export type AttentionVM = NonNullable<CockpitState["attention"]>[number];
+
 // ─── Lane / column layout ─────────────────────────────────────────────────────
 //
 // The prototype board has THREE columns: Working / Needs you / Done. The data
@@ -402,16 +411,114 @@ function delegationsBlock(state: CockpitState): string {
   </section>`;
 }
 
+// ─── Attention bar (M10 Phase C) ───────────────────────────────────────────────
+
 /**
- * The full Board: tab strip, header, the pending-delegations block,
- * three lane columns, status bar. Pre-existing callers expect a single string;
- * the drawer is appended separately by the webview client.
+ * A short, human label for one attention item, derived from its `kind`. For an
+ * approval, prefer the structured `approvalDetail` (tool + description) when the
+ * engine supplied it; otherwise fall back to a neutral phrase. Every engine /
+ * approval-supplied substring is escaped; the per-kind phrases are static
+ * literals. The remaining kinds map to a fixed phrase each.
+ */
+function attentionLabel(item: AttentionVM): string {
+  switch (item.kind) {
+    case "approval": {
+      const detail = item.approvalDetail;
+      return detail
+        ? `${escapeHtml(detail.tool)}: ${escapeHtml(detail.description)}`
+        : "wants approval";
+    }
+    case "conflict":
+      return "hit a merge conflict";
+    case "review":
+      return "ready to review";
+    case "error":
+      return "errored";
+    case "detached":
+      return "detached";
+    case "cleanup":
+      return "merge cleanup failed";
+    default: {
+      // Exhaustiveness guard: a new attention kind is a loud compile error here.
+      const _exhaustive: never = item.kind;
+      void _exhaustive;
+      return "";
+    }
+  }
+}
+
+/**
+ * The inline PRIMARY action for one attention item, reusing the EXACT
+ * data-action verbs (and data-* attributes) the rest of the board already emits,
+ * so the existing delegated click handler routes these without any change:
+ *   approval -> Allow + Deny (copied verbatim from `approvalPanel`: data-action
+ *               approve/deny + data-id + data-approval-id; the decision is the
+ *               verb), conflict -> resolve-conflict, review/error/detached ->
+ *               open-review, cleanup -> retry-cleanup. The id is escaped.
+ */
+function attentionAction(item: AttentionVM): string {
+  const id = escapeHtml(item.id);
+  switch (item.kind) {
+    case "approval": {
+      const approvalId = escapeHtml(item.pendingApprovalId ?? "");
+      return (
+        `<button class="attn-act attn-allow" data-action="approve" data-id="${id}" data-approval-id="${approvalId}" type="button">Allow</button>` +
+        `<button class="attn-act attn-deny" data-action="deny" data-id="${id}" data-approval-id="${approvalId}" type="button">Deny</button>`
+      );
+    }
+    case "conflict":
+      return `<button class="attn-act" data-action="resolve-conflict" data-id="${id}" type="button">Resolve</button>`;
+    case "review":
+    case "error":
+    case "detached":
+      return `<button class="attn-act" data-action="open-review" data-id="${id}" type="button">Review</button>`;
+    case "cleanup":
+      return `<button class="attn-act" data-action="retry-cleanup" data-id="${id}" type="button">Retry cleanup</button>`;
+    default: {
+      const _exhaustive: never = item.kind;
+      void _exhaustive;
+      return "";
+    }
+  }
+}
+
+/**
+ * The sticky ATTENTION BAR: ONE attention item at a time with an "n of m"
+ * counter, an urgency marker, the role name, a short human label, a clickable
+ * focus region, and an inline primary action. Returns "" for an empty queue (no
+ * bar). `index` is clamped into range via modulo so the webview's auto-advance
+ * ticker can pass any monotonic counter. It reuses existing messages only: the
+ * label region posts `focus`, and the primary action posts the verb for the
+ * item's kind. Every engine-supplied string is escaped.
+ */
+export function renderAttentionBar(attention: AttentionVM[], index: number): string {
+  if (!attention.length) return "";
+  const i = (((index % attention.length) + attention.length) % attention.length);
+  const item = attention[i]!;
+  const id = escapeHtml(item.id);
+  const role = escapeHtml(item.roleName);
+  const counter = `${i + 1} of ${attention.length}`;
+  return `<section class="attention-bar kind-${escapeHtml(item.kind)}" aria-label="Needs you" aria-live="polite" aria-atomic="true">
+    <span class="attn-mark" aria-hidden="true"></span>
+    <button class="attn-label" data-action="focus" data-id="${id}" type="button"><span class="attn-role">${role}</span><span class="attn-text">${attentionLabel(item)}</span></button>
+    <span class="attn-count">${counter}</span>
+    <span class="attn-actions">${attentionAction(item)}</span>
+  </section>`;
+}
+
+/**
+ * The full Board: tab strip, header, the sticky attention bar, the
+ * pending-delegations block, three lane columns, status bar. Pre-existing callers
+ * expect a single string; the drawer is appended separately by the webview
+ * client. The attention bar sits between the header and the lanes, initialised at
+ * index 0 (the most-urgent item); the webview ticker re-renders just that bar.
  */
 export function renderBoard(state: CockpitState): string {
   const lanes = COLUMNS.map((col) => columnSection(col, state.cards)).join("");
   return `<div class="board-shell">
   <div class="board">
     ${boardHeader(state)}
+    ${renderAttentionBar(state.attention ?? [], 0)}
     ${delegationsBlock(state)}
     <div class="lanes">${lanes}</div>
     ${statusBar(state)}

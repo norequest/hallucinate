@@ -217,6 +217,53 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
 .bh-library:hover { background:#2c2c34; border-color:var(--border-hover); }
 .bh-library:focus, .bh-library:focus-visible { outline:none; box-shadow:0 0 0 1px var(--status-working); }
 
+/* ─── Attention bar (M10 Phase C) ───────────────────────────────────────────────
+   A sticky strip between the board header and the lanes surfacing ONE urgent
+   item at a time (the webview ticker auto-advances it). Graphite surface with a
+   warm amber urgency accent; conflict/error flip the accent to red/salmon. Reuses
+   the existing data-action verbs, so no click-handler change. No new keyframes. */
+.attention-bar {
+  position:sticky; top:0; z-index:5;
+  flex:0 0 auto;
+  display:flex; align-items:center; gap:12px;
+  padding:9px 22px;
+  background:var(--bg-panel);
+  border-bottom:1px solid var(--border-subtle);
+  box-shadow:inset 3px 0 0 var(--amber);
+}
+.attention-bar.kind-conflict, .attention-bar.kind-error {
+  background:var(--bg-panel); border-bottom-color:var(--border-subtle); box-shadow:inset 3px 0 0 var(--red);
+}
+.attn-mark {
+  flex:0 0 auto; width:7px; height:7px; border-radius:50%;
+  background:var(--amber); box-shadow:0 0 0 3px rgba(226,169,60,0.18);
+}
+.attention-bar.kind-conflict .attn-mark, .attention-bar.kind-error .attn-mark {
+  background:var(--red); box-shadow:0 0 0 3px rgba(240,132,140,0.18);
+}
+.attn-label {
+  flex:1 1 auto; min-width:0;
+  display:flex; align-items:baseline; gap:8px;
+  background:transparent; border:none; padding:0; margin:0;
+  font-family:inherit; text-align:left; cursor:pointer; color:var(--text-secondary);
+}
+.attn-role { flex:0 0 auto; font-family:'Manrope',sans-serif; font-weight:700; font-size:12.5px; color:var(--text-primary); }
+.attn-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--text-secondary); }
+.attn-label:hover .attn-text { color:var(--text-primary); }
+.attn-count { flex:0 0 auto; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-tertiary); }
+.attn-actions { flex:0 0 auto; display:flex; align-items:center; gap:7px; }
+.attn-act {
+  background:var(--bg-surface-low); border:1px solid var(--border-default); color:var(--text-secondary);
+  padding:5px 11px; border-radius:7px; font-size:11.5px; font-weight:600;
+  font-family:inherit; cursor:pointer; transition:var(--t-interactive);
+}
+.attn-act:hover { background:#2c2c34; border-color:var(--border-hover); color:var(--text-primary); }
+.attn-allow { background:var(--amber); border-color:var(--amber); color:var(--on-accent); }
+.attn-allow:hover { background:var(--amber-deep); border-color:var(--amber-deep); color:var(--on-accent); }
+.attn-deny:hover { color:var(--red); border-color:var(--red); }
+.attn-act:focus, .attn-act:focus-visible,
+.attn-label:focus, .attn-label:focus-visible { outline:none; box-shadow:0 0 0 1px var(--status-working); }
+
 /* ─── Lanes: three columns (prototype lines 104-195) ────────────────────────── */
 
 .lanes { flex:1; min-height:0; display:flex; gap:16px; padding:18px 22px; overflow:hidden; }
