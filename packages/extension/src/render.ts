@@ -607,10 +607,15 @@ function diffTab(card: CardVM): string {
 }
 
 /**
- * The right drawer for the focused agent, matching the prototype drawer
+ * The docked inspector for the focused agent, matching the prototype drawer
  * (lines 206-337): header (role + chips + close), the faint goal line, the
  * Instructions / Output / Diff tabs, an inline detail block, and the footer
  * action bar (approval panel, steer/send-back boxes, and the state actions).
+ *
+ * It docks as a non-modal side panel beside the board (see `.drawer` in app.css),
+ * so the board stays visible and every other agent keeps rendering while one is
+ * focused. The header close button (`data-action="close-drawer"`) is the close
+ * path; there is no full-screen scrim dimming the board.
  */
 export function renderDrawer(state: CockpitState): string {
   if (!state.focusedId) return "";
@@ -620,7 +625,7 @@ export function renderDrawer(state: CockpitState): string {
   const goal = focused.goal ? `<div class="drawer-goal">${escapeHtml(focused.goal)}</div>` : "";
   const tabs = `<nav class="tabs"><button class="tab active" data-tab="instructions">Instructions</button><button class="tab" data-tab="output">Output</button><button class="tab" data-tab="diff">Diff</button></nav>`;
   const bar = drawerFooter(focused);
-  return `<div class="drawer-scrim" data-action="close-drawer"></div><aside class="drawer" data-id="${id}">
+  return `<aside class="drawer" data-id="${id}">
   <header class="drawer-head">
     <span class="drawer-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
     <div class="drawer-id">

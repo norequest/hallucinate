@@ -111,6 +111,12 @@ body { background:var(--bg-stage); color:var(--text-primary); font-family:'Inter
 body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 #root[data-view="anatomy"] { display:flex; flex-direction:row; flex:1; min-height:0; height:100%; overflow:hidden; }
 
+/* BOARD view: a flex row so the inspector docks beside the board instead of
+   floating over it. The board shell is `flex:1` and the inspector (`.drawer`,
+   rendered only when an agent is focused) is a fixed-width column to its right.
+   With no agent focused there is no `.drawer`, so the board fills the panel. */
+#root[data-view="board"] { display:flex; flex-direction:row; min-height:0; overflow:hidden; }
+
 /* ===========================================================================
    === BOARD === (from style.css)
    Board shell, lanes, agent cards, drawer, composer / dispatch modal.
@@ -135,7 +141,7 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
 
 /* ─── Board shell: tab strip + board column ─────────────────────────────────── */
 
-.board-shell { display:flex; flex-direction:column; height:100%; min-height:0; background:var(--bg-stage); }
+.board-shell { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; height:100%; min-height:0; background:var(--bg-stage); }
 
 /* TAB STRIP (prototype lines 70-79) */
 .tabstrip {
@@ -518,20 +524,17 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
 .status-bar .sb-awaiting { color:#caa869; }
 .status-bar .sb-version { margin-left:auto; }
 
-/* ─── Drawer (prototype lines 206-337) ──────────────────────────────────────── */
+/* ─── Inspector (prototype lines 206-337) ───────────────────────────────────── */
 
-/* Scrim behind the drawer: dims the board so the half-covered lane cards read as
-   "behind", and a click closes the drawer (data-action matches the host handler).
-   z-index 50 sits under the drawer (51) but below composer (100) / task (120). */
-.drawer-scrim { position:fixed; inset:0; background:rgba(8,8,10,.5); z-index:50; }
-
+/* Non-modal, docked inspector: a side column beside the board (#root[data-view=
+   "board"] is a flex row, see top of file). The board keeps its full markup and
+   stays visible, so N agents can be watched while one is focused. No scrim, no
+   overlay: the close button (data-action="close-drawer") is the only close path.
+   A left border divides it from the board; no heavy overlay shadow. */
 .drawer {
-  position:fixed; top:0; right:0;
-  width:42%; max-width:560px; height:100%;
-  z-index:51;
+  flex:0 0 clamp(360px, 38%, 560px); min-width:0; height:100%;
   background:var(--bg-panel);
   border-left:1px solid var(--border-default);
-  box-shadow:-8px 0 24px rgba(0,0,0,.5);
   padding:0; overflow:hidden; box-sizing:border-box;
   display:flex; flex-direction:column;
 }
@@ -1899,12 +1902,15 @@ button[data-action="stop"]:focus, button[data-action="stop"]:focus-visible {
 button:disabled, button[disabled] { cursor: not-allowed; opacity: .5; }
 
 /* ── Narrow dock breakpoint ───────────────────────────────────────────────────
-   When the panel is docked narrow, the drawer goes full-width (no scrim needed),
-   the three lane columns stack and scroll vertically, and the two-up grids
-   collapse to a single column so cards stay legible. */
+   Below this width there is no room for the board and a docked inspector side by
+   side, so the inspector takes over the panel full-width (still non-modal: no
+   scrim, the close button is the only close path). The three lane columns stack
+   and scroll vertically, and the two-up grids collapse to a single column. */
 @media (max-width: 560px) {
-  .drawer { width:100%; max-width:none; }
-  .drawer-scrim { display:none; }
+  .drawer {
+    position:fixed; top:0; right:0; z-index:51;
+    flex-basis:auto; width:100%; max-width:none; height:100%;
+  }
   .lanes { flex-direction:column; overflow-y:auto; }
   .skill-grid, .discover-group-cards { grid-template-columns:1fr; }
 }

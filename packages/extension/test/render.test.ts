@@ -470,11 +470,13 @@ describe("renderDrawer", () => {
   it("is empty when nothing is focused (board stays full-width)", () => {
     expect(renderDrawer({ cards: [card()], delegations: [] })).toBe("");
   });
-  it("emits a click-to-close scrim immediately before the drawer panel", () => {
+  it("docks as a non-modal inspector: no full-screen scrim, close via the header button", () => {
     const html = renderDrawer({ cards: [card({ id: "a1" })], focusedId: "a1", delegations: [] });
-    // The scrim dims the board behind the drawer and routes clicks to close-drawer.
-    expect(html).toContain('<div class="drawer-scrim" data-action="close-drawer"></div>');
-    expect(html.indexOf('class="drawer-scrim"')).toBeLessThan(html.indexOf('class="drawer"'));
+    // The inspector docks beside the board (no modal scrim dimming/hiding it), so
+    // the header close button is the close path and still posts close-drawer.
+    expect(html).not.toContain("drawer-scrim");
+    expect(html).toContain('class="drawer"');
+    expect(html).toContain('class="drawer-close" data-action="close-drawer"');
   });
   it("renders Instructions / Output / Diff tabs for the focused card", () => {
     const html = renderDrawer({ cards: [card({ id: "a1" })], focusedId: "a1", delegations: [] });

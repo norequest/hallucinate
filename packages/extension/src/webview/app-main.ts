@@ -149,7 +149,6 @@ function renderBoardView(): void {
   if (closedDrawerId !== null && lastCockpit.focusedId === closedDrawerId) {
     // The user closed THIS exact drawer; keep it shut despite the re-render.
     root.querySelector(".drawer")?.remove();
-    root.querySelector(".drawer-scrim")?.remove();
   } else if (closedDrawerId !== null) {
     // Focus moved to a different card (or cleared): the suppression no longer
     // applies, so let the freshly rendered drawer stand.
@@ -945,15 +944,15 @@ function handleBoardClick(target: HTMLElement): void {
     return;
   }
 
-  // close-drawer (the × button OR the scrim, both carry data-action="close-drawer").
+  // close-drawer (the × header button carries data-action="close-drawer"). The
+  // docked inspector has no scrim, so the header button is the only close path.
   const closeBtn = target.closest<HTMLElement>('[data-action="close-drawer"]');
   if (closeBtn) {
     // Record which drawer the user closed so the next `state` tick (which re-adds
-    // the drawer from state.focusedId) keeps it shut. Remove both the drawer and
-    // its scrim sibling. Reset the tab so a later re-open starts on the default.
+    // the drawer from state.focusedId) keeps it shut. Remove the docked drawer.
+    // Reset the tab so a later re-open starts on the default.
     closedDrawerId = lastCockpit.focusedId ?? null;
     document.querySelector(".drawer")?.remove();
-    document.querySelector(".drawer-scrim")?.remove();
     drawerTab = "instructions";
     return;
   }
