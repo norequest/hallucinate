@@ -4,7 +4,7 @@ Run a team of AI coding agents in isolated git worktrees, without leaving VS Cod
 
 Hallucinate dispatches agents to your own engine CLIs (GitHub Copilot, Gemini/ACP), watches them stream on one board, and lets you review each agent's diff before anything merges. Because it drives each engine's CLI, it reuses that tool's existing login. No API key.
 
-> Beta. Published to the VS Code Marketplace as a pre-release (extension `v0.1.10`). The coordination core is built and tested: 8 packages, 1609 tests.
+> Beta. Published to the VS Code Marketplace (extension `v0.1.10`). The coordination core is built and tested: 8 packages, 1609 tests.
 
 ## Demo
 
@@ -32,9 +32,9 @@ Hallucinate dispatches agents to your own engine CLIs (GitHub Copilot, Gemini/AC
 
 ## Quick start
 
-1. Install from the VS Code Marketplace (search "Hallucinate: Run AI Coding Agents" in the Extensions view, or run the command). This is a pre-release (beta) build:
+1. Install from the VS Code Marketplace (search "Hallucinate · AI Agent Teams" in the Extensions view, or run the command). This is an early beta build:
    ```bash
-   code --install-extension norequest.hallucinate
+   code --install-extension norequest.hallucinate-agents
    ```
 2. Open a folder that is a git repository.
 3. Click the Hallucinate icon in the activity bar to open the Board (or run "Hallucinate: Open Board").

@@ -1,6 +1,6 @@
 {
-  "name": "hallucinate",
-  "displayName": "Hallucinate: Run AI Coding Agents",
+  "name": "hallucinate-agents",
+  "displayName": "Hallucinate · AI Agent Teams",
   "description": "Run a team of AI coding agents in isolated git worktrees.",
   "version": "0.1.10",
   "icon": "media/icon.png",
