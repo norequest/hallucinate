@@ -294,6 +294,40 @@ function orderWithChildren(inCol: CardVM[]): Array<{ card: CardVM; child: boolea
   return out;
 }
 
+/**
+ * The FLOOR: the default board layout (M10 Phase D). A salience-ordered grid of
+ * size+warmth tiles over `state.floor` (built host-side by `selectFloor`), each
+ * tile wrapping the existing agent card. The tile's `size`/`warmth` are taken
+ * STRAIGHT from the contract (never recomputed here) and surface as
+ * `size-* warmth-*` class hooks the stylesheet styles. A child tile is nested via
+ * the `is-child` class on the WRAPPER only (margin + dashed accent); the inner
+ * card is NOT marked is-child, because that fires the LANE-only elbow connector
+ * and 18px indent, which in the Floor grid would point at nothing (the lead sits
+ * on a different row) and double-indent the card. A floor id with no matching
+ * card is skipped (the board never renders a hole). The Floor renders ONLY from
+ * `state.floor`: when it is empty/undefined the body is the quiet placeholder
+ * even if `state.cards` is populated, so authors must supply `floor` to assert on
+ * card bodies. (In production `selectState` always populates it.)
+ */
+export function renderFloor(state: CockpitState): string {
+  const byId = new Map(state.cards.map((c) => [c.id, c]));
+  const tiles = state.floor ?? [];
+  if (!tiles.length) {
+    return `<div class="floor floor-empty"><div class="lane-empty">No agents yet</div></div>`;
+  }
+  const body = tiles
+    .map((tile) => {
+      const card = byId.get(tile.id);
+      if (!card) return "";
+      // The nesting cue is the `.floor-tile.is-child` WRAPPER only; do NOT pass
+      // the lane `child` flag into the card (it would add the lane elbow/indent).
+      const childClass = tile.child ? " is-child" : "";
+      return `<div class="floor-tile size-${tile.size} warmth-${tile.warmth}${childClass}">${renderCardHTML(card, state.cards, {})}</div>`;
+    })
+    .join("");
+  return `<div class="floor">${body}</div>`;
+}
+
 function columnSection(col: Column, cards: CardVM[]): string {
   const inCol = cards.filter((c) => col.lanes.includes(c.lane));
   const body = inCol.length
@@ -359,12 +393,21 @@ function laneCounts(cards: CardVM[]): LaneCounts {
   return counts;
 }
 
-/** The status bar (prototype lines 198-204): N running · M awaiting review. */
-function statusBar(state: CockpitState): string {
+/**
+ * The status bar (prototype lines 198-204): N running · M awaiting review, plus
+ * the board-layout toggle (M10 Phase D). The toggle lets the operator flip
+ * between the default Floor and the "Group by status" lane columns; the active
+ * tab is webview-local state passed in as `groupByStatus`. The two tabs are a
+ * mutually-exclusive choice, so the group is a `radiogroup` of `radio` buttons
+ * with `aria-checked` (not a button group with `aria-pressed`).
+ */
+function statusBar(state: CockpitState, groupByStatus = false): string {
   const counts = laneCounts(state.cards);
   const awaiting = counts.needsYou + counts.conflict;
+  const layoutToggle = `<span class="board-layout-toggle" role="radiogroup" aria-label="Board layout"><button class="layout-tab${!groupByStatus ? " active" : ""}" role="radio" aria-checked="${!groupByStatus}" data-action="set-board-layout" data-layout="floor" type="button">Floor</button><button class="layout-tab${groupByStatus ? " active" : ""}" role="radio" aria-checked="${groupByStatus}" data-action="set-board-layout" data-layout="status" type="button">Group by status</button></span>`;
   return `<div class="status-bar">
     <span class="sb-branch"><svg class="sb-branch-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="6.5" cy="6" r="2.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="7" r="2.5"/><path d="M6.5 8.5v7M9 7h4.5a3 3 0 013 3"/></svg>main</span>
+    ${layoutToggle}
     <span class="sb-running">${counts.working} running</span>
     <span class="sb-awaiting">${awaiting} awaiting review</span>
     <span class="sb-version">Hallucinate</span>
@@ -507,21 +550,28 @@ export function renderAttentionBar(attention: AttentionVM[], index: number): str
 }
 
 /**
- * The full Board: tab strip, header, the sticky attention bar, the
- * pending-delegations block, three lane columns, status bar. Pre-existing callers
- * expect a single string; the drawer is appended separately by the webview
- * client. The attention bar sits between the header and the lanes, initialised at
- * index 0 (the most-urgent item); the webview ticker re-renders just that bar.
+ * The full Board: header, the sticky attention bar, the pending-delegations
+ * block, the central layout, and the status bar (which carries the layout
+ * toggle). The central layout DEFAULTS to the Floor (size+warmth tiles, M10
+ * Phase D); `opts.groupByStatus` swaps it for the lane columns. The header,
+ * attention bar, delegations, and status bar are identical in both layouts.
+ * Pre-existing callers expect a single string; the drawer is appended separately
+ * by the webview client. The attention bar sits between the header and the
+ * layout, initialised at index 0 (the most-urgent item); the webview ticker
+ * re-renders just that bar.
  */
-export function renderBoard(state: CockpitState): string {
-  const lanes = COLUMNS.map((col) => columnSection(col, state.cards)).join("");
+export function renderBoard(state: CockpitState, opts: { groupByStatus?: boolean } = {}): string {
+  const groupByStatus = opts.groupByStatus ?? false;
+  const layout = groupByStatus
+    ? `<div class="lanes">${COLUMNS.map((col) => columnSection(col, state.cards)).join("")}</div>`
+    : renderFloor(state);
   return `<div class="board-shell">
   <div class="board">
     ${boardHeader(state)}
     ${renderAttentionBar(state.attention ?? [], 0)}
     ${delegationsBlock(state)}
-    <div class="lanes">${lanes}</div>
-    ${statusBar(state)}
+    ${layout}
+    ${statusBar(state, groupByStatus)}
   </div>
 </div>`;
 }

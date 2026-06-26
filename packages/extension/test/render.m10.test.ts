@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { renderBoard, renderDrawer, renderAttentionBar } from "../src/render.js";
-import type { CardVM, CockpitState } from "@hallucinate/cockpit";
+import { renderBoard, renderFloor, renderDrawer, renderAttentionBar } from "../src/render.js";
+import type { CardVM, CockpitState, FloorTileVM } from "@hallucinate/cockpit";
 
 /** The attention-queue item type, derived from the already-exported CockpitState. */
 type AttentionItem = NonNullable<CockpitState["attention"]>[number];
@@ -32,10 +32,13 @@ function card(overrides: Partial<CardVM>): CardVM {
 /**
  * Compose the board view exactly as the webview client does
  * (`renderBoardView`: `root.innerHTML = renderBoard(state) + renderDrawer(state)`),
- * so these assertions read the same markup the panel renders.
+ * so these assertions read the same markup the panel renders. These docked-drawer
+ * assertions read per-card markup off the board, so they use the column layout
+ * (`{ groupByStatus: true }`): the default Floor only renders tiles the host put
+ * in `state.floor`, which these card-only fixtures do not populate.
  */
 function boardView(state: CockpitState): string {
-  return `${renderBoard(state)}${renderDrawer(state)}`;
+  return `${renderBoard(state, { groupByStatus: true })}${renderDrawer(state)}`;
 }
 
 describe("renderBoard + renderDrawer (M10: docked, non-modal inspector)", () => {
@@ -88,9 +91,11 @@ describe("renderBoard + renderDrawer (M10: docked, non-modal inspector)", () => 
 });
 
 describe("renderBoard (M10 Phase B: live activity tail on the working card)", () => {
-  /** Render a single card onto the board and return its markup. */
+  /** Render a single card onto the board and return its markup. The tail block is
+   *  per-card content, so render via the column layout: the default Floor only
+   *  shows tiles present in `state.floor`, which this card-only fixture omits. */
   function boardWith(overrides: Partial<CardVM>): string {
-    return renderBoard({ cards: [card(overrides)], delegations: [] });
+    return renderBoard({ cards: [card(overrides)], delegations: [] }, { groupByStatus: true });
   }
 
   it("a working card renders each tail line in a tail block", () => {
@@ -219,5 +224,125 @@ describe("renderAttentionBar (M10 Phase C: sticky attention bar)", () => {
     );
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("renderBoard / renderFloor (M10 Phase D: Floor is the default board layout)", () => {
+  /** One Floor tile (size+warmth over a card resolved by id). */
+  function tile(over: Partial<FloorTileVM> = {}): FloorTileVM {
+    return { id: "a1", size: "md", warmth: "live", child: false, ...over };
+  }
+
+  it("renderFloor renders one size+warmth tile per floor entry, resolving each card by id", () => {
+    const html = renderFloor({
+      cards: [card({ id: "a1", roleName: "Implementer" }), card({ id: "a2", roleName: "Reviewer" })],
+      delegations: [],
+      floor: [tile({ id: "a1", size: "lg", warmth: "hot" }), tile({ id: "a2", size: "sm", warmth: "idle" })],
+    });
+    // The Floor container, plus one floor-tile per entry carrying the tile's
+    // size + warmth straight from the contract (never recomputed here).
+    expect(html).toContain('class="floor"');
+    expect(html).toContain("floor-tile size-lg warmth-hot");
+    expect(html).toContain("floor-tile size-sm warmth-idle");
+    // Each tile wraps the card resolved by id.
+    expect(html).toContain('data-id="a1"');
+    expect(html).toContain('data-id="a2"');
+  });
+
+  it("renderFloor SKIPS a floor id with no matching card", () => {
+    const html = renderFloor({
+      cards: [card({ id: "a1" })],
+      delegations: [],
+      floor: [tile({ id: "a1" }), tile({ id: "ghost" })],
+    });
+    expect(html).toContain('data-id="a1"');
+    expect(html).not.toContain('data-id="ghost"');
+    // Exactly one tile is rendered (the resolvable one).
+    expect((html.match(/class="floor-tile/g) ?? []).length).toBe(1);
+  });
+
+  it("renderFloor marks a child tile is-child on the WRAPPER only (no lane elbow/indent on the inner card)", () => {
+    const html = renderFloor({
+      cards: [card({ id: "lead1" }), card({ id: "kid1", parentId: "lead1" })],
+      delegations: [],
+      floor: [tile({ id: "lead1" }), tile({ id: "kid1", child: true })],
+    });
+    // The nesting cue lives ONLY on the floor-tile wrapper (margin + dashed
+    // accent). The inner card must NOT carry is-child: in the Floor grid the lead
+    // is on a different row, so the lane elbow connector would point at nothing
+    // and the card would be indented twice (14px tile + 18px card). So is-child
+    // appears exactly once: on the wrapper.
+    expect(html).toContain("floor-tile size-md warmth-live is-child");
+    expect((html.match(/is-child/g) ?? []).length).toBe(1);
+  });
+
+  it("renderFloor with an empty floor renders a quiet placeholder, never the lane columns", () => {
+    const html = renderFloor({ cards: [card({ id: "a1" })], delegations: [], floor: [] });
+    expect(html).toContain('class="floor floor-empty"');
+    expect(html).toContain("No agents yet");
+    expect(html).not.toContain('class="lanes"');
+  });
+
+  it("renderBoard with no opts renders the Floor (not the lane columns)", () => {
+    const html = renderBoard({
+      cards: [card({ id: "a1" })],
+      delegations: [],
+      floor: [tile({ id: "a1" })],
+    });
+    expect(html).toContain('class="floor"');
+    expect(html).not.toContain('class="lanes"');
+    expect(html).toContain('data-id="a1"');
+  });
+
+  it("renderBoard with { groupByStatus: true } renders the lane columns (not the Floor)", () => {
+    const html = renderBoard(
+      { cards: [card({ id: "a1", lane: "working" })], delegations: [], floor: [tile({ id: "a1" })] },
+      { groupByStatus: true },
+    );
+    expect(html).toContain('class="lanes"');
+    expect(html).toContain("lane-col-");
+    expect(html).not.toContain('class="floor"');
+  });
+
+  it("renders the board-layout toggle as a radiogroup in BOTH layouts with aria-checked reflecting the active mode", () => {
+    const state: CockpitState = {
+      cards: [card({ id: "a1" })],
+      delegations: [],
+      floor: [tile({ id: "a1" })],
+    };
+    const floorHtml = renderBoard(state);
+    // A mutually-exclusive switch: a radiogroup of two radios, not a button group.
+    expect(floorHtml).toContain('role="radiogroup"');
+    expect(floorHtml).toContain('role="radio"');
+    expect(floorHtml).toContain('data-action="set-board-layout"');
+    expect(floorHtml).toContain('data-layout="floor"');
+    expect(floorHtml).toContain('data-layout="status"');
+    // Floor is active: the Floor radio is checked, the status radio is not.
+    expect(floorHtml).toMatch(/aria-checked="true"[^>]*data-layout="floor"/);
+    expect(floorHtml).toMatch(/aria-checked="false"[^>]*data-layout="status"/);
+    // The retired button-group ARIA pattern is gone.
+    expect(floorHtml).not.toContain("aria-pressed");
+
+    const statusHtml = renderBoard(state, { groupByStatus: true });
+    expect(statusHtml).toContain('role="radiogroup"');
+    // Group-by-status is active: the status radio is checked, the Floor radio is not.
+    expect(statusHtml).toMatch(/aria-checked="true"[^>]*data-layout="status"/);
+    expect(statusHtml).toMatch(/aria-checked="false"[^>]*data-layout="floor"/);
+  });
+
+  it("GOLDEN: the Group-by-status layout still renders Working / Needs you / Done and the folded needsYou count", () => {
+    const cards: CardVM[] = [
+      card({ id: "w1", lane: "working" }),
+      card({ id: "n1", lane: "needsYou", state: "awaiting-approval", attention: true }),
+      card({ id: "n2", lane: "needsYou", state: "error", attention: true }),
+      card({ id: "c1", lane: "conflict", state: "conflict", attention: true }),
+      card({ id: "d1", lane: "done", state: "merged" }),
+    ];
+    const html = renderBoard({ cards, delegations: [] }, { groupByStatus: true });
+    expect(html).toContain("Working");
+    expect(html).toContain("Needs you");
+    expect(html).toContain("Done");
+    // The Needs you column folds needsYou (2) + conflict (1) = 3, exactly as before.
+    expect(html).toMatch(/lane-col-needsYou[\s\S]*?class="count">3</);
   });
 });

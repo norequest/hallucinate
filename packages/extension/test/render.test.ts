@@ -157,7 +157,7 @@ describe("renderBoard", () => {
       card({ id: "c1", lane: "conflict", state: "conflict", attention: true }),
       card({ id: "d1", lane: "done", state: "merged" }),
     ];
-    const html = renderBoard({ cards, delegations: [] });
+    const html = renderBoard({ cards, delegations: [] }, { groupByStatus: true });
     // The three board columns.
     expect(html).toContain("Working");
     expect(html).toContain("Needs you");
@@ -193,13 +193,14 @@ describe("renderBoard", () => {
   it("shows a 'Clear all' button in the Done lane header when it has cards", () => {
     const html = renderBoard(
       board({ cards: [card({ id: "d1", lane: "done", state: "done", diff: { files: ["a.ts"], patch: "P" } })] }),
+      { groupByStatus: true },
     );
     expect(html).toContain('class="lane-clear"');
     expect(html).toContain('data-action="clear-done-lane"');
     expect(html).toContain("Clear all");
   });
   it("omits 'Clear all' when the Done lane is empty", () => {
-    const html = renderBoard(board({ cards: [card({ id: "w1", lane: "working" })] }));
+    const html = renderBoard(board({ cards: [card({ id: "w1", lane: "working" })] }), { groupByStatus: true });
     expect(html).not.toContain('class="lane-clear"');
     expect(html).not.toContain('data-action="clear-done-lane"');
   });
@@ -212,6 +213,7 @@ describe("renderBoard", () => {
           card({ id: "d1", lane: "done", state: "done", diff: { files: ["a.ts"], patch: "P" } }),
         ],
       }),
+      { groupByStatus: true },
     );
     // Exactly one Clear all affordance, in the Done column.
     const clears = html.match(/data-action="clear-done-lane"/g) ?? [];
@@ -219,11 +221,11 @@ describe("renderBoard", () => {
     expect(html).toMatch(/lane-col-done[\s\S]*?lane-clear/);
   });
   it("renders empty columns as a quiet placeholder, never a hard border", () => {
-    const html = renderBoard({ cards: [card({ lane: "working" })], delegations: [] });
+    const html = renderBoard({ cards: [card({ lane: "working" })], delegations: [] }, { groupByStatus: true });
     expect(html).toContain('class="lane-empty"');
   });
   it("gives each empty column its own copy (Needs-you uses no em dash)", () => {
-    const html = renderBoard({ cards: [], delegations: [] });
+    const html = renderBoard({ cards: [], delegations: [] }, { groupByStatus: true });
     expect(html).toContain("No agents working");
     expect(html).toContain("Nothing needs you right now.");
     expect(html).toContain("Nothing merged yet");
@@ -294,6 +296,7 @@ describe("renderBoard", () => {
           card({ id: "child1", roleName: "Coder", parentId: "lead1" }),
         ],
       }),
+      { groupByStatus: true },
     );
     expect(html).toContain('class="via"');
     expect(html).toContain("via Lead");
@@ -348,6 +351,7 @@ describe("renderBoard", () => {
           card({ id: "kid2", roleName: "Tester", lane: "working", parentId: "lead1" }),
         ],
       }),
+      { groupByStatus: true },
     );
     const lead = html.indexOf('data-id="lead1"');
     const kid1 = html.indexOf('data-id="kid1"');
@@ -378,13 +382,14 @@ describe("renderBoard", () => {
           card({ id: "kid1", roleName: "Coder", lane: "working", parentId: "lead1" }),
         ],
       }),
+      { groupByStatus: true },
     );
     expect(html).toContain("1 sub-agent");
     expect(html).not.toContain("1 sub-agents");
   });
 
   it("adds NO sub-agents affordance to a plain card with no children", () => {
-    const html = renderBoard(board({ cards: [card({ id: "solo", lane: "working" })] }));
+    const html = renderBoard(board({ cards: [card({ id: "solo", lane: "working" })] }), { groupByStatus: true });
     expect(html).not.toContain('class="subagents"');
   });
 
@@ -397,6 +402,7 @@ describe("renderBoard", () => {
           card({ id: "kid1", roleName: "Coder", lane: "needsYou", state: "awaiting-approval", attention: true, parentId: "lead1" }),
         ],
       }),
+      { groupByStatus: true },
     );
     // The cross-lane child is NOT dropped.
     const kid1 = html.indexOf('data-id="kid1"');
@@ -442,6 +448,7 @@ describe("renderBoard", () => {
           card({ id: "sub1", roleName: "Coder", lane: "working", parentId: "lead1", virtual: true }),
         ],
       }),
+      { groupByStatus: true },
     );
     const sub = html.indexOf('data-id="sub1"');
     const openTag = html.slice(html.lastIndexOf("<section", sub), html.indexOf(">", sub));

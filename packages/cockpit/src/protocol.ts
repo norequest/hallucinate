@@ -109,6 +109,52 @@ export interface AttentionVM {
   since?: number;
 }
 
+/** A Floor tile's relative prominence: large (attention), medium (working), small (idle). */
+export type TileSize = "lg" | "md" | "sm";
+
+/**
+ * A Floor tile's "warmth" (how much it wants your eyes), derived purely from the
+ * agent's state:
+ *   hot  -> an urgent problem (conflict, error, merge-cleanup-failed),
+ *   warm -> waiting on you (awaiting-approval, detached, done/ready-to-review),
+ *   live -> actively progressing (working, preparing),
+ *   idle -> quiet (stopped).
+ * The CSS maps each to an accent so a busy Floor reads at a glance.
+ */
+export type TileWarmth = "hot" | "warm" | "live" | "idle";
+
+/**
+ * One tile on the Floor: a presentation projection over a CardVM. Carries only
+ * the card id plus its derived size + warmth + child flag, so the Floor payload
+ * stays lean (the full card is resolved from `CockpitState.cards` by id at render
+ * time, never duplicated here). `child` is true for a delegated sub-agent, which
+ * the Floor renders nested under its lead. Produced by `selectFloor`,
+ * salience-ordered (most-urgent first), each lead immediately followed by its
+ * children.
+ */
+export interface FloorTileVM {
+  /** The agent id; the card is resolved from CockpitState.cards. */
+  id: string;
+  size: TileSize;
+  warmth: TileWarmth;
+  /** True for a delegated child tile, rendered nested under its lead. */
+  child: boolean;
+}
+
+/**
+ * One lead-coordinated team: a lead agent and the ids of its delegated children
+ * (cards whose `parentId` is the lead). Id-based (cards resolved from
+ * `CockpitState.cards`), so the grouping is lean. Produced by `selectTeams`,
+ * which emits a group only for leads that actually have children. The Floor uses
+ * it to nest children under leads; Phase E draws lead-to-child connectors over it.
+ */
+export interface TeamGroupVM {
+  /** The lead agent id. */
+  leadId: string;
+  /** Child agent ids (parentId === leadId), in id order. */
+  memberIds: string[];
+}
+
 /** The whole cockpit, a pure function of orchestrator events. `cards` are pre-ordered. */
 export interface CockpitState {
   cards: CardVM[];
@@ -122,6 +168,17 @@ export interface CockpitState {
    * when nothing needs you.
    */
   attention?: AttentionVM[];
+  /**
+   * The Floor layout: salience-ordered tiles (size + warmth) over `cards`, with
+   * children nested under leads. The default board layout; the "Group by status"
+   * toggle falls back to the lane columns. Omitted/empty before any agent exists.
+   */
+  floor?: FloorTileVM[];
+  /**
+   * Lead-coordinated teams: each lead with its delegated children, for nesting
+   * and (Phase E) connectors. Omitted/empty when no delegation has occurred.
+   */
+  teams?: TeamGroupVM[];
 }
 
 /** Messages the extension host sends INTO the webview. */

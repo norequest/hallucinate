@@ -81,6 +81,10 @@ let closedDrawerId: string | null = null;
 // fresh board render (renderBoard always emits the bar at index 0), then advanced
 // by the auto-advance ticker (tickAttention) which re-renders ONLY the bar.
 let attentionIndex = 0;
+// Board layout: the Floor (size+warmth tiles) is the default; the status bar's
+// "Group by status" toggle flips this to the lane columns. Webview-local only
+// (no host round-trip), so a layout choice survives every `state` re-render.
+let groupByStatus = false;
 
 // Library.
 let libraryTab: LibraryTab = "agents";
@@ -149,7 +153,7 @@ function renderBoardView(): void {
   attentionIndex = 0;
   // The board shell (tab strip + header + empty lanes + status bar) always
   // renders so "+ New agent" stays reachable even with zero agents.
-  root.innerHTML = `${renderBoard(lastCockpit)}${renderDrawer(lastCockpit)}`;
+  root.innerHTML = `${renderBoard(lastCockpit, { groupByStatus })}${renderDrawer(lastCockpit)}`;
   tickElapsed();
   // The drawer is re-rendered from state every tick (a streaming agent posts
   // `state` continuously). Re-apply the user's client-only drawer choices so a
@@ -999,6 +1003,20 @@ function handleBoardClick(target: HTMLElement): void {
   // confirms (destructive) then discards each done agent.
   if (target.closest<HTMLElement>('[data-action="clear-done-lane"]')) {
     vscode.postMessage({ type: "clear-done-lane" });
+    return;
+  }
+
+  // Board-layout toggle (status bar): Floor vs "Group by status". Webview-local
+  // (no host message), and it carries NO data-id, so it is handled BEFORE the
+  // id-bound branch below (which early-returns on a missing data-id). Re-render
+  // only when the layout actually changes.
+  const layoutBtn = target.closest<HTMLElement>('[data-action="set-board-layout"]');
+  if (layoutBtn) {
+    const next = layoutBtn.dataset["layout"] === "status";
+    if (next !== groupByStatus) {
+      groupByStatus = next;
+      render();
+    }
     return;
   }
 

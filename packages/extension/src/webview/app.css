@@ -319,6 +319,38 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
   text-align:center; color:#52525a; font-size:12px; padding:24px 8px; line-height:1.5;
 }
 
+/* ─── Floor: the default board layout (M10 Phase D) ──────────────────────────
+   A salience-ordered grid of agent cards. Each tile carries a size hook (lg/md/sm)
+   and a warmth hook (hot/warm/live/idle) from selectFloor; the warmth tints the
+   card's left accent and the size lets a hot lead claim two columns. The grid is
+   auto-fill so it reflows as the panel narrows (the host docks the inspector to
+   the right). Calm, on-palette: it reuses the status tokens and the same faint
+   glow rgba values as the attention bar / lane dots. */
+.floor {
+  flex:1; min-height:0; overflow-y:auto;
+  padding:18px 22px;
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+  grid-auto-rows:min-content; gap:14px; align-content:start;
+}
+/* Overrides .floor's display:grid; an empty board has no tiles to flow. */
+.floor-empty { display:block; }
+.floor-tile { min-width:0; display:flex; }
+.floor-tile > .card { flex:1; min-width:0; }
+/* A large tile spans two columns; the browser clamps the span when the board is
+   too narrow to hold two columns, so this is harmless on a docked-inspector squeeze. */
+.floor-tile.size-lg { grid-column:span 2; }
+.floor-tile.size-sm > .card { opacity:0.9; }
+.floor-tile.warmth-hot > .card { border-left-color:var(--status-conflict); box-shadow:0 0 0 1px rgba(240,132,140,0.12); }
+.floor-tile.warmth-warm > .card { border-left-color:var(--status-attention); }
+/* A done (ready-to-review) tile stays in the warm tier (size), but amber is the
+   system's "needs your input / blocked" signal, so keep done on its own green
+   identity. CSS-only accent override; the card already carries lane-done. */
+.floor-tile.warmth-warm > .card.lane-done { border-left-color:var(--status-done); }
+.floor-tile.warmth-live > .card { border-left-color:var(--status-working); }
+.floor-tile.warmth-idle > .card { opacity:0.82; }
+.floor-tile.is-child { margin-left:14px; }
+.floor-tile.is-child > .card { border-left-style:dashed; }
+
 /* ─── Agent card (prototype lines 116-128) ──────────────────────────────────── */
 
 .card {
@@ -573,7 +605,9 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
 /* ─── Status bar (prototype lines 198-204) ──────────────────────────────────── */
 
 .status-bar {
-  height:24px; flex:0 0 24px;
+  /* Bumped 24 -> 26px so the layout toggle's tabs (and their focus ring) sit
+     comfortably without crowding the bar. Still subtle. */
+  height:26px; flex:0 0 26px;
   background:#202024; border-top:1px solid var(--border-subtle);
   display:flex; align-items:center; padding:0 12px; gap:16px;
   font-size:11px; color:var(--text-tertiary); font-family:'JetBrains Mono',monospace;
@@ -582,6 +616,22 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
 .status-bar .sb-branch-icon { flex:0 0 auto; }
 .status-bar .sb-awaiting { color:#caa869; }
 .status-bar .sb-version { margin-left:auto; }
+
+/* Board-layout toggle (M10 Phase D): a tidy two-tab segmented control in the
+   status bar flipping Floor <-> Group by status. The active tab reads as a quiet
+   raised chip; the others are faint text. Webview-local state, on-palette. */
+.board-layout-toggle { display:flex; gap:2px; align-items:center; }
+.layout-tab {
+  background:transparent; border:none; color:var(--text-tertiary);
+  font:inherit; font-size:11px; cursor:pointer;
+  padding:2px 8px; border-radius:5px;
+  transition:color 120ms ease, background 120ms ease;
+}
+.layout-tab:hover { color:var(--text-secondary); }
+/* The active chip needs a luminance-independent signal (not just brighter text):
+   a heavier weight plus a visibly raised chip boundary against the status bar. */
+.layout-tab.active { color:var(--text-primary); background:#323238; font-weight:600; }
+.layout-tab:focus, .layout-tab:focus-visible { outline:none; box-shadow:0 0 0 1px var(--status-working); }
 
 /* ─── Inspector (prototype lines 206-337) ───────────────────────────────────── */
 

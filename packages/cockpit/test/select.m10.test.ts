@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, OrchestratorEvent } from "@hallucinate/core";
+import type { TileSize, TileWarmth } from "../src/protocol.js";
 import { initialModel, reduce } from "../src/reducer.js";
-import { selectAttention, selectState } from "../src/select.js";
+import { selectAttention, selectFloor, selectState, selectTeams } from "../src/select.js";
 
 function agent(id: string, state: Agent["state"], over: Partial<Agent> = {}): Agent {
   return {
@@ -90,5 +91,181 @@ describe("selectAttention (M10 attention queue)", () => {
     const att = selectAttention(m);
     expect(att[0]!.pendingApprovalId).toBe("ap-7");
     expect(att[0]!.approvalDetail).toEqual({ tool: "Run", description: "rm -rf build" });
+  });
+});
+
+describe("selectTeams (M10 Phase D: lead-grouped teams)", () => {
+  it("groups a lead's children into one id-sorted group", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("lead", "working")));
+    // Add the children out of id order to prove memberIds gets sorted.
+    m = reduce(m, added(agent("c2", "working", { parentId: "lead" })));
+    m = reduce(m, added(agent("c1", "working", { parentId: "lead" })));
+
+    expect(selectTeams(m)).toEqual([{ leadId: "lead", memberIds: ["c1", "c2"] }]);
+  });
+
+  it("forms no group for a child whose parent is not on the board", () => {
+    const m = reduce(initialModel(), added(agent("orphan", "working", { parentId: "ghost" })));
+    expect(selectTeams(m)).toEqual([]);
+  });
+
+  it("emits no group for a childless lead", () => {
+    const m = reduce(initialModel(), added(agent("solo", "working")));
+    expect(selectTeams(m)).toEqual([]);
+  });
+
+  it("orders multiple groups by leadId ascending, members id-sorted", () => {
+    let m = initialModel();
+    // Scrambled insertion order; leads and members must both come out sorted.
+    m = reduce(m, added(agent("beta", "working")));
+    m = reduce(m, added(agent("alpha", "working")));
+    m = reduce(m, added(agent("b2", "working", { parentId: "beta" })));
+    m = reduce(m, added(agent("b1", "working", { parentId: "beta" })));
+    m = reduce(m, added(agent("a1", "working", { parentId: "alpha" })));
+
+    expect(selectTeams(m)).toEqual([
+      { leadId: "alpha", memberIds: ["a1"] },
+      { leadId: "beta", memberIds: ["b1", "b2"] },
+    ]);
+  });
+
+  it("does not mutate the input model or its cards Map", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("lead", "working")));
+    m = reduce(m, added(agent("c2", "working", { parentId: "lead" })));
+    m = reduce(m, added(agent("c1", "working", { parentId: "lead" })));
+
+    const sizeBefore = m.cards.size;
+    const snapshot = JSON.stringify([...m.cards.entries()]);
+    selectTeams(m);
+    expect(m.cards.size).toBe(sizeBefore);
+    expect(JSON.stringify([...m.cards.entries()])).toBe(snapshot);
+  });
+});
+
+describe("selectFloor (M10 Phase D: salience-ordered Floor tiles)", () => {
+  it("returns [] for an empty model", () => {
+    expect(selectFloor(initialModel())).toEqual([]);
+  });
+
+  it("derives size + warmth purely from state", () => {
+    const cases: ReadonlyArray<[Agent["state"], TileWarmth, TileSize]> = [
+      ["conflict", "hot", "lg"],
+      ["awaiting-approval", "warm", "lg"],
+      ["working", "live", "md"],
+      ["stopped", "idle", "sm"],
+    ];
+    for (const [state, warmth, size] of cases) {
+      const m = reduce(initialModel(), added(agent("a1", state)));
+      expect(selectFloor(m)).toEqual([{ id: "a1", size, warmth, child: false }]);
+    }
+  });
+
+  it("orders tiles most-urgent first by salience rank", () => {
+    let m = initialModel();
+    // Added scrambled; salience must re-sort them.
+    m = reduce(m, added(agent("w", "working"))); // rank 6
+    m = reduce(m, added(agent("c", "conflict"))); // rank 0
+    m = reduce(m, added(agent("ap", "awaiting-approval"))); // rank 3
+    m = reduce(m, added(agent("s", "stopped"))); // rank 8
+    // conflict(0) before approval(3) before working(6) before stopped(8).
+    expect(selectFloor(m).map((t) => t.id)).toEqual(["c", "ap", "w", "s"]);
+  });
+
+  it("ranks done (ready-to-review) ahead of working per the salience map", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("w", "working"))); // rank 6
+    m = reduce(m, added(agent("d", "done"))); // rank 5: needs your review
+    expect(selectFloor(m).map((t) => t.id)).toEqual(["d", "w"]);
+  });
+
+  it("tie-breaks equal-rank tiles by oldest needsYouSince first, then id", () => {
+    vi.useFakeTimers();
+    try {
+      // "zebra" waits first (older), "apple" waits later. Id order alone would
+      // put "apple" first, so a since-first result proves since beats id.
+      vi.setSystemTime(1_000);
+      let m = reduce(initialModel(), added(agent("zebra", "awaiting-approval")));
+      vi.setSystemTime(2_000);
+      m = reduce(m, added(agent("apple", "awaiting-approval")));
+
+      expect(selectFloor(m).map((t) => t.id)).toEqual(["zebra", "apple"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("nests each child immediately after its lead, lead at child:false, child keeping its own size/warmth", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("lead", "working"))); // live/md
+    m = reduce(m, added(agent("c1", "conflict", { parentId: "lead" }))); // hot/lg
+    m = reduce(m, added(agent("c2", "stopped", { parentId: "lead" }))); // idle/sm
+    m = reduce(m, added(agent("z", "done"))); // separate top-level, rank 5
+
+    // Top-level sorted by salience: z(done, 5) before lead(working, 6). Each
+    // child sits right after its lead in id order, with its OWN warmth/size.
+    expect(selectFloor(m)).toEqual([
+      { id: "z", size: "lg", warmth: "warm", child: false },
+      { id: "lead", size: "md", warmth: "live", child: false },
+      { id: "c1", size: "lg", warmth: "hot", child: true },
+      { id: "c2", size: "sm", warmth: "idle", child: true },
+    ]);
+  });
+
+  it("emits a full delegation chain depth-first: lead, child, grandchild, each once", () => {
+    // A -> B -> C is a 3-level chain; a one-level expansion would drop C.
+    let m = initialModel();
+    m = reduce(m, added(agent("A", "working")));
+    m = reduce(m, added(agent("B", "working", { parentId: "A" })));
+    m = reduce(m, added(agent("C", "working", { parentId: "B" })));
+
+    expect(selectFloor(m)).toEqual([
+      { id: "A", size: "md", warmth: "live", child: false },
+      { id: "B", size: "md", warmth: "live", child: true },
+      { id: "C", size: "md", warmth: "live", child: true },
+    ]);
+  });
+
+  it("output is a permutation of model.cards (no drop, no dup) with a grandchild present", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("A", "working")));
+    m = reduce(m, added(agent("B", "working", { parentId: "A" })));
+    m = reduce(m, added(agent("C", "working", { parentId: "B" })));
+    m = reduce(m, added(agent("solo", "conflict")));
+
+    const floor = selectFloor(m);
+    expect(floor).toHaveLength(m.cards.size);
+    expect(floor.map((t) => t.id).sort()).toEqual([...m.cards.keys()].sort());
+  });
+
+  it("breaks a malformed parentId cycle: each card appears exactly once, no infinite loop", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("A", "working", { parentId: "B" })));
+    m = reduce(m, added(agent("B", "working", { parentId: "A" })));
+
+    const floor = selectFloor(m);
+    expect(floor).toHaveLength(2);
+    expect(floor.map((t) => t.id).sort()).toEqual(["A", "B"]);
+  });
+});
+
+describe("selectState integration (M10 Phase D: floor + teams)", () => {
+  it("returns floor and teams equal to the standalone selectors", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("lead", "working")));
+    m = reduce(m, added(agent("c1", "conflict", { parentId: "lead" })));
+    m = reduce(m, added(agent("solo", "done")));
+
+    const st = selectState(m);
+    expect(st.floor).toEqual(selectFloor(m));
+    expect(st.teams).toEqual(selectTeams(m));
+  });
+
+  it("always populates floor and teams (teams empty for a single childless agent)", () => {
+    const m = reduce(initialModel(), added(agent("a1", "working")));
+    const st = selectState(m);
+    expect(st.floor).toEqual([{ id: "a1", size: "md", warmth: "live", child: false }]);
+    expect(st.teams).toEqual([]);
   });
 });
