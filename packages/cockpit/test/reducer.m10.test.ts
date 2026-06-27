@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, OrchestratorEvent } from "@hallucinate/core";
-import { initialModel, reduce, OUTPUT_CAP } from "../src/reducer.js";
+import { initialModel, reduce, OUTPUT_CAP, HISTORY_CAP } from "../src/reducer.js";
 
 function agent(over: Partial<Agent> = {}): Agent {
   const { task, ...rest } = over;
@@ -203,5 +203,97 @@ describe("reducer M10: CardVM.momentum (diff growth pulse)", () => {
     vi.setSystemTime(7_777);
     m = reduce(m, updated(agent({ state: "working", diff: diff(12, 0) })));
     expect(m.cards.get("a1")!.momentum!.at).toBe(7_777);
+  });
+});
+
+// Delegation events for the history ring. The proposal shape matches the core
+// DelegationProposal; the lead's task text is irrelevant to the recorded label.
+const proposed = (p: { id: string; leadAgentId: string; roleName: string; task: string }): OrchestratorEvent => ({
+  kind: "delegation-proposed",
+  proposal: { ...p, state: "pending" },
+});
+const resolved = (p: { id: string; leadAgentId: string; roleName: string; task: string }): OrchestratorEvent => ({
+  kind: "delegation-resolved",
+  proposal: { ...p, state: "approved" },
+});
+
+describe("reducer M10 Phase F: in-session history ring", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("records exactly one entry for agent-added (kind, role, id, label, seq 1)", () => {
+    vi.setSystemTime(1_234);
+    const m = reduce(initialModel(), added(agent({ state: "working" })));
+    expect(m.history).toHaveLength(1);
+    const e = m.history[0]!;
+    expect(e.kind).toBe("agent-added");
+    expect(e.roleName).toBe("Implementer");
+    expect(e.agentId).toBe("a1");
+    expect(e.label.length).toBeGreaterThan(0);
+    expect(e.seq).toBe(1);
+    expect(e.at).toBe(1_234);
+  });
+
+  it("records NO entry for an agent-event output tick", () => {
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    const before = m.history.length;
+    m = reduce(m, out("a1", "still streaming\n"));
+    expect(m.history.length).toBe(before);
+  });
+
+  it("records a real state transition but ignores a no-op same-state update", () => {
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    const afterAdd = m.history.length;
+    m = reduce(m, updated(agent({ state: "awaiting-approval" })));
+    expect(m.history.length).toBe(afterAdd + 1);
+    expect(m.history[m.history.length - 1]!.kind).toBe("agent-updated");
+    // A second update to the SAME state records nothing (ring is transitions, not spam).
+    m = reduce(m, updated(agent({ state: "awaiting-approval" })));
+    expect(m.history.length).toBe(afterAdd + 1);
+  });
+
+  it("bounds the ring at HISTORY_CAP, dropping oldest while seq stays monotonic", () => {
+    vi.setSystemTime(1_000);
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    const total = HISTORY_CAP + 5;
+    // total - 1 more recordable updates, alternating state so each is a real transition.
+    for (let i = 1; i < total; i++) {
+      const state = i % 2 === 1 ? "preparing" : "working";
+      m = reduce(m, updated(agent({ state })));
+    }
+    expect(m.history.length).toBe(HISTORY_CAP);
+    // seq keeps climbing past the cap; it is not reset by the drop.
+    expect(m.history[m.history.length - 1]!.seq).toBe(total);
+    // The oldest entries fell off: the surviving first seq is total - HISTORY_CAP + 1.
+    expect(m.history[0]!.seq).toBe(total - HISTORY_CAP + 1);
+  });
+
+  it("never mutates the prior history array (a new array reference per record)", () => {
+    let m = reduce(initialModel(), added(agent({ state: "working" })));
+    const prevRef = m.history;
+    const prevCopy = [...m.history];
+    m = reduce(m, updated(agent({ state: "awaiting-approval" })));
+    // The OLD array is untouched (same length and contents).
+    expect(prevRef.length).toBe(prevCopy.length);
+    expect(prevRef).toEqual(prevCopy);
+    // The new model holds a DIFFERENT array.
+    expect(m.history).not.toBe(prevRef);
+  });
+
+  it("records delegation-proposed and delegation-resolved with the right kind/label", () => {
+    let m = reduce(initialModel(), added(agent({ id: "lead", state: "working" })));
+    m = reduce(m, proposed({ id: "d1", leadAgentId: "lead", roleName: "Reviewer", task: "review it" }));
+    const propEntry = m.history[m.history.length - 1]!;
+    expect(propEntry.kind).toBe("delegation-proposed");
+    expect(propEntry.label).toContain("Reviewer");
+
+    m = reduce(m, resolved({ id: "d1", leadAgentId: "lead", roleName: "Reviewer", task: "review it" }));
+    const resEntry = m.history[m.history.length - 1]!;
+    expect(resEntry.kind).toBe("delegation-resolved");
+    expect(resEntry.label).toBe("delegation resolved");
   });
 });

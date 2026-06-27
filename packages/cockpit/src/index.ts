@@ -5,6 +5,7 @@ export type {
   CockpitState,
   DelegationVM,
   FloorTileVM,
+  HistoryEntryVM,
   TeamGroupVM,
   TileSize,
   TileWarmth,
@@ -16,6 +17,6 @@ export { isWebviewMessage } from "./protocol.js";
 export { laneFor } from "./lane.js";
 export { initialModel, reduce, setFocus, OUTPUT_CAP } from "./reducer.js";
 export type { CockpitModel } from "./reducer.js";
-export { selectState, selectFloor, selectTeams } from "./select.js";
+export { selectState, selectFloor, selectTeams, selectHistory } from "./select.js";
 export { composerOptions, buildDispatchMessage, canDispatch, ENGINE_FAMILIES } from "./composer.js";
 export type { ComposerOptions, PresetChip, TeamRow, DispatchForm } from "./composer.js";

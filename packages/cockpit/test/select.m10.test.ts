@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, OrchestratorEvent } from "@hallucinate/core";
 import type { TileSize, TileWarmth } from "../src/protocol.js";
 import { initialModel, reduce } from "../src/reducer.js";
-import { selectAttention, selectFloor, selectState, selectTeams } from "../src/select.js";
+import { selectAttention, selectFloor, selectHistory, selectState, selectTeams } from "../src/select.js";
 
 function agent(id: string, state: Agent["state"], over: Partial<Agent> = {}): Agent {
   return {
@@ -267,5 +267,27 @@ describe("selectState integration (M10 Phase D: floor + teams)", () => {
     const st = selectState(m);
     expect(st.floor).toEqual([{ id: "a1", size: "md", warmth: "live", child: false }]);
     expect(st.teams).toEqual([]);
+  });
+});
+
+describe("selectHistory (M10 Phase F)", () => {
+  it("returns recorded entries newest-first (highest seq first)", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("a1", "working")));
+    m = reduce(m, added(agent("a2", "working")));
+    m = reduce(m, added(agent("a3", "working")));
+    expect(selectHistory(m).map((e) => e.seq)).toEqual([3, 2, 1]);
+  });
+
+  it("does not mutate model.history (it stays oldest-first after the call)", () => {
+    let m = initialModel();
+    m = reduce(m, added(agent("a1", "working")));
+    m = reduce(m, added(agent("a2", "working")));
+    selectHistory(m);
+    expect(m.history.map((e) => e.seq)).toEqual([1, 2]);
+  });
+
+  it("returns [] for an empty model", () => {
+    expect(selectHistory(initialModel())).toEqual([]);
   });
 });

@@ -404,6 +404,7 @@ function boardHeader(state: CockpitState): string {
         <span class="bh-count done"><span class="dot"></span>${counts.done} merged</span>
       </div>
       <span class="bh-sep"></span>
+      <button class="bh-history" data-action="open-history" type="button">History</button>
       <button class="bh-library" data-action="open-library" data-lib-tab="agents" type="button">Library</button>
     </div>
   </header>`;

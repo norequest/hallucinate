@@ -183,7 +183,7 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
 }
 .bh-left, .bh-right { display:flex; align-items:center; }
 .bh-left { gap:13px; }
-.bh-right { gap:16px; }
+.bh-right { gap:16px; flex-wrap:wrap; row-gap:6px; }
 .bh-title { font-family:'Manrope',sans-serif; font-weight:800; font-size:18px; letter-spacing:-0.01em; color:var(--text-primary); }
 .bh-sep { width:1px; height:18px; background:#2e2e34; display:inline-block; }
 .bh-meta { font-size:12.5px; color:#74747c; }
@@ -216,6 +216,18 @@ body:has(#root[data-view="anatomy"]) { height:100vh; display:flex; flex-directio
 }
 .bh-library:hover { background:#2c2c34; border-color:var(--border-hover); }
 .bh-library:focus, .bh-library:focus-visible { outline:none; box-shadow:0 0 0 1px var(--status-working); }
+
+/* The [History] nav button: a quiet sibling of Library that opens the
+   full-page in-session activity timeline (M10 Phase F). */
+.bh-history {
+  display:flex; align-items:center; gap:7px;
+  background:#222228; border:1px solid var(--border-default); color:var(--text-secondary);
+  padding:6px 11px; border-radius:7px; font-size:12px; font-weight:600;
+  font-family:inherit; cursor:pointer;
+  transition:background 120ms ease, border-color 120ms ease;
+}
+.bh-history:hover { background:#2c2c34; border-color:var(--border-hover); }
+.bh-history:focus, .bh-history:focus-visible { outline:none; box-shadow:0 0 0 1px var(--status-working); }
 
 /* ─── Attention bar (M10 Phase C) ───────────────────────────────────────────────
    A sticky strip between the board header and the lanes surfacing ONE urgent
@@ -2071,3 +2083,76 @@ button:disabled, button[disabled] { cursor: not-allowed; opacity: .5; }
   .lanes { flex-direction:column; overflow-y:auto; }
   .skill-grid, .discover-group-cards { grid-template-columns:1fr; }
 }
+
+/* ===========================================================================
+   === HISTORY === (M10 Phase F: in-session activity history)
+   A full-page activity timeline opened from the board [History] button and
+   closed back to the board. Mirrors the review / anatomy full-page shells: a
+   sticky head (back + title) over a scrolling body of newest-first rows.
+   Graphite tokens only; per-kind dots reuse the status palette.
+   =========================================================================== */
+.history {
+  display:flex; flex-direction:column;
+  height:100%; min-height:0;
+  background:var(--bg-page); color:var(--text-primary);
+}
+.history-head {
+  flex:0 0 auto;
+  display:flex; align-items:center; gap:14px;
+  padding:18px 24px;
+  border-bottom:1px solid var(--border-faint);
+}
+.history-close {
+  display:flex; align-items:center; gap:7px;
+  background:none; cursor:pointer; color:var(--text-tertiary);
+  font-family:var(--font-body); font-size:12.5px; font-weight:600;
+  padding:7px 13px; border-radius:7px; border:1px solid #2e2e34;
+  transition:color 130ms ease, border-color 130ms ease;
+}
+.history-close:hover { color:#d6d6da; border-color:#3a3a42; }
+.history-close:focus-visible { outline:none; color:var(--text-primary); border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
+.history-title {
+  margin:0;
+  font-family:var(--font-display); font-weight:800; font-size:18px;
+  color:var(--text-primary); letter-spacing:-0.01em;
+}
+
+.history-body { flex:1 1 auto; min-height:0; overflow:auto; padding:10px 16px 18px; }
+.history-empty { color:var(--text-tertiary); padding:22px 24px; font-size:13px; }
+
+.history-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; }
+.history-row { margin:0; padding:0; }
+/* A row cell is either an inert <div> or a focusable <button>; the button chrome
+   is reset to inherit so both read identically. width:100% so the button fills
+   the <li>. The hairline divider lives on the cell and is dropped on the last row. */
+.history-entry {
+  display:flex; align-items:center; gap:11px;
+  width:100%; padding:10px 10px;
+  font:inherit; text-align:left; color:inherit;
+  background:none; border:none; border-bottom:1px solid var(--border-hair);
+}
+.history-row:last-child .history-entry { border-bottom:none; }
+.history-focusable { cursor:pointer; border-radius:7px; transition:background 120ms ease; }
+.history-focusable:hover { background:var(--bg-surface-low); }
+.history-focusable:focus-visible { box-shadow:0 0 0 1px var(--blue) inset; outline:none; }
+
+.history-dot { flex:0 0 auto; width:8px; height:8px; border-radius:2px; background:var(--text-ghost); }
+.history-label {
+  flex:1 1 auto; min-width:0;
+  font-size:12.5px; color:var(--text-secondary);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.history-role {
+  flex:0 0 auto;
+  font-family:var(--font-mono); font-size:10px; font-weight:500;
+  color:var(--text-secondary);
+  background:var(--bg-surface-low); border:1px solid var(--border-default);
+  border-radius:5px; padding:2px 7px;
+}
+.history-time { flex:0 0 auto; font-family:var(--font-mono); font-size:10.5px; color:var(--text-faint); }
+
+/* Per-kind accent dots reuse the status palette (subtle, graphite-aligned). */
+.hk-agent-added { background:var(--status-working); }
+.hk-agent-updated { background:var(--status-done); }
+.hk-delegation-proposed { background:var(--status-attention); }
+.hk-delegation-resolved { background:var(--green-deep); }

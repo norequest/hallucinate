@@ -20,6 +20,7 @@ import type {
 import { buildDispatchMessage, canDispatch, ENGINE_FAMILIES } from "@hallucinate/cockpit";
 import type { Autonomy } from "@hallucinate/core";
 import { renderBoard, renderDrawer, renderAttentionBar } from "../render.js";
+import { renderHistory } from "../render-history.js";
 import { nextAttentionIndex } from "../attention-cycle.js";
 import { renderComposerHTML } from "../render-composer.js";
 import {
@@ -138,6 +139,9 @@ function render(): void {
       break;
     case "review":
       renderReviewView();
+      break;
+    case "history":
+      renderHistoryView();
       break;
     default: {
       const _exhaustive: never = view;
@@ -313,6 +317,33 @@ function renderReviewView(): void {
   }
   const parsed = parseUnifiedDiff(lastReviewCard.diff?.patch ?? "");
   root.innerHTML = renderReviewBody(lastReviewCard, parsed, lastReviewOpts);
+}
+
+/**
+ * The in-session History tab. A full-page view rendered from the ALREADY-CACHED
+ * board state (lastCockpit): no new host message and no host fetch. Because the
+ * timeline is derived from the live cockpit state, the `state` listener re-renders
+ * this view too so new events stream in while it is open.
+ *
+ * Two pieces of DOM glue keep the streamed re-render calm. Scroll is preserved
+ * across the innerHTML swap (mirrors renderAnatomyView) so a new event never yanks
+ * the operator. And the pure render's `.history-time[data-at]` timestamps are
+ * formatted here (render stays pure; formatting is DOM glue). A static HH:MM is
+ * enough, so no repeating ticker is needed.
+ */
+function renderHistoryView(): void {
+  if (!root) return;
+  const bodyScroll = root.querySelector<HTMLElement>(".history-body")?.scrollTop ?? 0;
+  root.innerHTML = renderHistory(lastCockpit);
+  // Format the captured timestamps (render stays pure; formatting is DOM glue).
+  root.querySelectorAll<HTMLElement>(".history-time[data-at]").forEach((el) => {
+    const ms = Number(el.dataset["at"]);
+    if (Number.isFinite(ms) && ms > 0) {
+      el.textContent = new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+  });
+  const nextBody = root.querySelector<HTMLElement>(".history-body");
+  if (nextBody) nextBody.scrollTop = bodyScroll;
 }
 
 // ─── Board: composer overlay helpers (ported from main.ts) ──────────────────────
@@ -717,7 +748,9 @@ window.addEventListener("message", (e: MessageEvent<HostToApp>) => {
   switch (data.type) {
     case "state":
       lastCockpit = data.state;
-      if (view === "board") render();
+      // The History view is derived from lastCockpit too, so keep it live: a new
+      // event streaming in re-renders the timeline while History is open.
+      if (view === "board" || view === "history") render();
       break;
     case "composer-options":
       // Opening the dispatch modal is a board affordance; jump to the board.
@@ -888,6 +921,12 @@ document.addEventListener("keydown", (e) => {
   if (view === "review") {
     backToBoard();
   }
+
+  // (4) Full-page history: Escape is the keyboard twin of the close button, so the
+  // user is never stranded off the Board (mirrors the review branch).
+  if (view === "history") {
+    backToBoard();
+  }
 });
 
 // ─── Click delegation (branches on `view` FIRST) ───────────────────────────────
@@ -915,6 +954,9 @@ document.addEventListener("click", (e) => {
       break;
     case "review":
       handleReviewClick(target);
+      break;
+    case "history":
+      handleHistoryClick(target);
       break;
   }
 });
@@ -991,6 +1033,15 @@ function handleBoardClick(target: HTMLElement): void {
   if (libBtn) {
     const tab = libBtn.dataset["libTab"] as LibraryTab | undefined;
     navigateToLibrary(tab);
+    return;
+  }
+
+  // [History] button: open the in-session History tab. The timeline reads the
+  // already-cached lastCockpit, so this is webview-local (NO host post, no fetch).
+  // It carries no data-id, so it must be handled BEFORE the id-bound branch below
+  // (which early-returns on a missing data-id).
+  if (target.closest<HTMLElement>('[data-action="open-history"]')) {
+    setView("history");
     return;
   }
 
@@ -1619,6 +1670,33 @@ function handleReviewClick(target: HTMLElement): void {
       vscode.postMessage({ type: "sendBack", agentId: id, feedback: text });
       if (textarea) textarea.value = "";
     }
+  }
+}
+
+// ─── History click delegation ──────────────────────────────────────────────────
+
+/**
+ * Clicks inside the in-session History tab. The close button returns to the
+ * board; a focusable timeline entry focuses its agent on the board, reusing the
+ * SAME focus path a card click uses (clear the close suppression, reset to the
+ * default drawer tab). Tolerant when no entry carries a data-id.
+ */
+function handleHistoryClick(target: HTMLElement): void {
+  // Close: back to the board.
+  if (target.closest<HTMLElement>('[data-action="close-history"]')) {
+    backToBoard();
+    return;
+  }
+
+  // A focusable timeline entry: focus its agent on the board. Match whichever
+  // element carries the data-id (an explicit focus action or a history entry).
+  const entry = target.closest<HTMLElement>('[data-action="focus"], .history-entry[data-id]');
+  const id = entry?.dataset["id"];
+  if (id) {
+    backToBoard();
+    closedDrawerId = null;
+    drawerTab = "instructions";
+    vscode.postMessage({ type: "focus", agentId: id });
   }
 }
 

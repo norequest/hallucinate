@@ -4,6 +4,7 @@ import type {
   CardVM,
   CockpitState,
   FloorTileVM,
+  HistoryEntryVM,
   TeamGroupVM,
   TileSize,
   TileWarmth,
@@ -220,6 +221,15 @@ export function selectFloor(model: CockpitModel): FloorTileVM[] {
   return tiles;
 }
 
+/**
+ * Pure: the in-session history, NEWEST-FIRST (most recent fold at the top) for
+ * the History tab. Returns a reversed copy, so `model.history` (oldest-first) is
+ * never mutated.
+ */
+export function selectHistory(model: CockpitModel): HistoryEntryVM[] {
+  return [...model.history].reverse();
+}
+
 /** Pure: derive the ordered, renderable CockpitState from the model. */
 export function selectState(model: CockpitModel): CockpitState {
   const cards = [...model.cards.values()].sort(compareCards);
@@ -227,6 +237,7 @@ export function selectState(model: CockpitModel): CockpitState {
   const attention = selectAttention(model);
   const floor = selectFloor(model);
   const teams = selectTeams(model);
-  const base: CockpitState = { cards, delegations, attention, floor, teams };
+  const history = selectHistory(model);
+  const base: CockpitState = { cards, delegations, attention, floor, teams, history };
   return model.focusedId === undefined ? base : { ...base, focusedId: model.focusedId };
 }

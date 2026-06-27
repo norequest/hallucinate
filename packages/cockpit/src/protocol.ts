@@ -165,6 +165,29 @@ export interface TeamGroupVM {
   memberIds: string[];
 }
 
+/**
+ * One entry in the in-session activity history: a single orchestrator event the
+ * reducer folded, projected to a render-ready one-liner. The history is a bounded
+ * ring (oldest dropped past the cap) and is surfaced newest-first by
+ * `selectHistory`. In-session ONLY: it is rebuilt from the live event stream,
+ * never persisted; replaying a prior session's on-disk log is deferred. Lean and
+ * id-based (the agent, if any, is resolved from `CockpitState.cards`).
+ */
+export interface HistoryEntryVM {
+  /** Monotonic fold index (also a stable render key); rises by one per recorded event. */
+  seq: number;
+  /** Unix ms when the event was folded. */
+  at: number;
+  /** The orchestrator event kind, for a per-kind icon/accent (e.g. "agent-updated"). */
+  kind: string;
+  /** A short human one-liner for the timeline row (the render layer escapes it). */
+  label: string;
+  /** The agent the entry concerns, when applicable, for a focus jump back to the board. */
+  agentId?: string;
+  /** The agent's role label, when resolvable, for display. */
+  roleName?: string;
+}
+
 /** The whole cockpit, a pure function of orchestrator events. `cards` are pre-ordered. */
 export interface CockpitState {
   cards: CardVM[];
@@ -189,6 +212,12 @@ export interface CockpitState {
    * and (Phase E) connectors. Omitted/empty when no delegation has occurred.
    */
   teams?: TeamGroupVM[];
+  /**
+   * In-session activity history: a bounded, newest-first list of folded
+   * orchestrator events for the History tab. In-session only (rebuilt from the
+   * live stream, never persisted). Omitted/empty before any event is recorded.
+   */
+  history?: HistoryEntryVM[];
 }
 
 /** Messages the extension host sends INTO the webview. */
