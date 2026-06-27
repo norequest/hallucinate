@@ -2,6 +2,24 @@
 
 All notable changes to the Hallucinate extension are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-06-27
+
+Board and library polish from a dogfooding pass.
+
+### Added
+
+- Team trays: a lead and its delegated teammates now render inside one labeled tray (team name, agent count, rolled-up status, a subtle team color) so a team reads as a single unit on the board.
+
+### Changed
+
+- Library: Teams is now the first tab and the default landing tab, and the Close control is a quieter, borderless ghost.
+- Board footer: Floor and Status are a clearer segmented control with an obvious active state and keyboard navigation; the running and awaiting counters are now plainly passive readouts, not dead buttons.
+
+### Fixed
+
+- Discard and Merge from the full-page review now return you to the board instead of leaving you on the just-resolved card.
+- A read-only sub-agent no longer shows "# Instructions" as its task, and instructions text is dedented so it reads cleanly.
+
 ## [0.1.10] - 2026-06-26
 
 Initial public pre-release (beta). The first build of Hallucinate published to the VS Code Marketplace.
