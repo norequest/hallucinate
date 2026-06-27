@@ -1684,7 +1684,11 @@ function handleReviewClick(target: HTMLElement): void {
   if (action === "merge") {
     vscode.postMessage({ type: "merge", agentId: id });
   } else if (action === "discard") {
+    // Discard always removes the card, so leave the full-page review immediately
+    // for instant feedback (mirrors resume below); the host also navigates back
+    // when the card resolves away, as a safety net for the async/Merge path.
     vscode.postMessage({ type: "discard", agentId: id });
+    backToBoard();
   } else if (action === "resume") {
     // Resume a stopped agent in its worktree (sendBack verb, empty feedback).
     vscode.postMessage({ type: "sendBack", agentId: id, feedback: "" });

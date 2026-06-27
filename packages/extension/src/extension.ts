@@ -21,6 +21,7 @@ import { createLibrary } from "./library-controller.js";
 import { createAnatomyController } from "./anatomy-controller.js";
 import { buildDraftAnatomyVM } from "./anatomy-draft.js";
 import { makeAppRouter } from "./app-router.js";
+import { reviewSyncAction } from "./review-sync.js";
 import { registerHallucinateHomeView } from "./home-view.js";
 import { type WebviewToHost } from "@hallucinate/cockpit";
 import type { AppToHost } from "./app-protocol.js";
@@ -429,10 +430,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // the review stays live even when nothing is focused. The router only acts
         // on a review-state when it is showing the review view, so a stale re-post
         // while on the board is a harmless cache refresh.
-        if (lastReviewedId) {
+        const reviewAction = reviewSyncAction(lastReviewedId, state.cards);
+        if (reviewAction === "repost") {
           const card = state.cards.find((c) => c.id === lastReviewedId);
           if (card) stage.postReview(card, reviewOpts());
-          else lastReviewedId = undefined;
+        } else if (reviewAction === "navigate-board") {
+          // The reviewed card was resolved away (Discard removes it, a clean Merge
+          // into main removes it): the full-page review can no longer show
+          // anything, so navigate the webview back to the board. Without this the
+          // user was left frozen on the now-gone card and Discard looked dead.
+          lastReviewedId = undefined;
+          stage.navigate("board");
         }
       },
       (message) => void vscode.window.showErrorMessage(`Hallucinate: ${message}`),
