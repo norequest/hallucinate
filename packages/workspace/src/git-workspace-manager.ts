@@ -167,14 +167,26 @@ export class GitWorkspaceManager implements WorkspaceManager {
     this.records.set(agentId, { path: workspace.path, branch: workspace.branch, baseSha });
   }
 
-  async diff(agentId: string): Promise<Diff> {
-    const rec = this.require(agentId);
-    // Snapshot any uncommitted agent work so the diff captures it.
+  /**
+   * Commit any uncommitted work in the agent's worktree as a snapshot so it is
+   * captured by operations that act on the committed branch HEAD (diff and
+   * merge). Idempotent: when the worktree is clean (already snapshotted, or never
+   * dirtied) `status --porcelain` is empty and this is a no-op, so it never
+   * double-commits or hits a "nothing to commit" error. Shared by diff() and
+   * merge() so merge() does not depend on diff() having run first.
+   */
+  private async snapshotWorktree(rec: AgentWorktree): Promise<void> {
     const status = await this.git(["status", "--porcelain"], rec.path);
     if (status.trim().length > 0) {
       await this.git(["add", "-A"], rec.path);
       await this.git(["commit", "-m", "hallucinate: agent work snapshot"], rec.path);
     }
+  }
+
+  async diff(agentId: string): Promise<Diff> {
+    const rec = this.require(agentId);
+    // Snapshot any uncommitted agent work so the diff captures it.
+    await this.snapshotWorktree(rec);
     // `-z` makes git emit NUL-delimited, unquoted paths so filenames with
     // spaces or non-ASCII bytes (e.g. Georgian) survive intact. Splitting on
     // "\n" + trim() over the default (quoted/escaped) output corrupts them.
@@ -304,14 +316,19 @@ export class GitWorkspaceManager implements WorkspaceManager {
   }
 
   /**
-   * Merge the agent's branch into the base. Call {@link diff} first: merge
-   * operates on the committed branch HEAD only, so any uncommitted work left in
-   * the worktree is captured by diff's snapshot commit, not by merge. The
-   * Orchestrator computes the diff on done before a merge can be triggered, so
-   * this ordering holds in the normal flow; direct callers must honor it.
+   * Merge the agent's branch into the base. Self-sufficient: it snapshots any
+   * uncommitted worktree work FIRST (via {@link snapshotWorktree}), so it does
+   * NOT depend on {@link diff} having run. merge operates on the committed branch
+   * HEAD only, so without this snapshot an agent whose work was not yet committed
+   * (the orchestrator fires diff() asynchronously on "done", and the user may
+   * click Merge in the window before it lands) would be merged as an empty no-op,
+   * silently losing the work. The snapshot is idempotent: if diff() already
+   * committed (or the worktree is clean) it is a no-op.
    */
   async merge(agentId: string): Promise<MergeResult> {
     const rec = this.require(agentId);
+    // Capture any uncommitted worktree work BEFORE the merge so it cannot be lost.
+    await this.snapshotWorktree(rec);
     const attempt = await this.runner(["merge", "--no-commit", "--no-ff", rec.branch], { cwd: this.repoRoot });
     if (attempt.exitCode !== 0) {
       const conflicted = await this.unmergedFiles();

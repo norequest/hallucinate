@@ -201,6 +201,13 @@ export function reduce(model: CockpitModel, event: OrchestratorEvent): CockpitMo
       delegations.delete(event.proposal.id);
       entry = { kind: "delegation-resolved", label: "delegation resolved" };
       break;
+    default: {
+      // A new OrchestratorEvent kind must be handled explicitly; this makes a
+      // silent fall-through a compile error.
+      const _exhaustive: never = event;
+      void _exhaustive;
+      break;
+    }
   }
   // Append to the bounded ring IMMUTABLY: never touch model.history. seq is the
   // last entry's seq + 1 (monotonic, NOT reset when the oldest are trimmed).
